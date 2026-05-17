@@ -97,6 +97,7 @@ npm run docs:build
 - 🤖 多源数据采集
 
   - Twitter/X 内容抓取
+  - Xquik 可作为 Twitter/X 抓取备用来源
   - 网站内容抓取 (基于 FireCrawl)
   - 支持自定义数据源配置
   - Advanced scraping and search via Jina AI

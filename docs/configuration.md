@@ -32,6 +32,7 @@ AI_SUMMARIZER_LLM_PROVIDER="QWEN:qwen-max"
 - `FIRE_CRAWL_API_KEY`: FireCrawl 抓取
 - `JINA_API_KEY`: Jina Reader / DeepSearch / Embedding / Rerank
 - `X_API_BEARER_TOKEN`: Twitter/X 抓取
+- `XQUIK_API_KEY`: 可选，Twitter/X 抓取备用来源
 
 ### 3. 微信发布
 

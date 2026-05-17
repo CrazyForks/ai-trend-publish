@@ -112,6 +112,8 @@ FIRE_CRAWL_API_KEY="your_api_key"  # FireCrawl API密钥
 
 # Twitter API配置 https://twitterapi.io/
 X_API_BEARER_TOKEN="your_api_key"  # Twitter API Bearer Token
+# 可选：Xquik 备用抓取源 https://xquik.com/
+XQUIK_API_KEY="your_xquik_api_key"  # Xquik API Key
 ```
 
 ### 通知服务配置
