@@ -4,23 +4,73 @@ import {
   ScrapedContent,
   ScraperOptions,
 } from "@src/modules/interfaces/scraper.interface.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
+import {
+  ConfigManager,
+  ConfigurationError,
+} from "@src/utils/config/config-manager.ts";
 import { formatDate } from "@src/utils/common.ts";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("twitter-scraper");
+const DEFAULT_TWEET_LIMIT = 20;
+const XQUIK_API_CONTRACT = "2026-04-29";
+
+interface TweetMediaSize {
+  w?: number;
+  h?: number;
+}
+
+interface TweetMedia {
+  media_url_https?: string;
+  mediaUrl?: string;
+  url?: string;
+  type?: string;
+  sizes?: {
+    large?: TweetMediaSize;
+  };
+}
+
+interface TweetRecord {
+  id?: string;
+  text?: string;
+  url?: string;
+  createdAt?: string;
+  extendedEntities?: {
+    media?: TweetMedia[];
+  };
+  media?: TweetMedia[];
+  quoted_tweet?: TweetRecord;
+}
+
+interface TweetSearchResponse {
+  tweets?: TweetRecord[];
+}
 
 export class TwitterScraper implements ContentScraper {
   private xApiBearerToken: string | undefined;
+  private xquikApiKey: string | undefined;
 
   constructor() {
   }
 
   async refresh(): Promise<void> {
     const startTime = Date.now();
-    this.xApiBearerToken = await ConfigManager.getInstance().get(
+    const configManager = ConfigManager.getInstance();
+    this.xApiBearerToken = await this.getOptionalConfig(
+      configManager,
       "X_API_BEARER_TOKEN",
     );
+    this.xquikApiKey = await this.getOptionalConfig(
+      configManager,
+      "XQUIK_API_KEY",
+    );
+
+    if (!this.xApiBearerToken && !this.xquikApiKey) {
+      throw new ConfigurationError(
+        "Configure X_API_BEARER_TOKEN or XQUIK_API_KEY for Twitter scraping",
+      );
+    }
+
     logger.debug(
       `TwitterScraper 初始化完成, 耗时: ${Date.now() - startTime}ms`,
     );
@@ -41,44 +91,28 @@ export class TwitterScraper implements ContentScraper {
 
     try {
       const query = `from:${username} -filter:replies within_time:24h`;
-      const apiUrl =
-        `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${
-          encodeURIComponent(
-            query,
-          )
-        }&queryType=Top`;
-
-      const response = await fetch(apiUrl, {
-        headers: {
-          "X-API-Key": `${this.xApiBearerToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorMsg = `Failed to fetch tweets: ${response.statusText}`;
-        throw new Error(errorMsg);
-      }
-
-      const tweets = await response.json();
-      const scrapedContent: ScrapedContent[] = tweets.tweets
-        .slice(0, 20)
-        .map((tweet: any) => {
+      const limit = options?.limit ?? DEFAULT_TWEET_LIMIT;
+      const tweets = await this.fetchTweets(query, limit);
+      const scrapedContent: ScrapedContent[] = tweets
+        .slice(0, limit)
+        .map((tweet) => {
           const quotedContent = this.getQuotedContent(tweet.quoted_tweet);
-          let media = this.getMediaList(tweet.extendedEntities);
+          let media = this.getMediaList(tweet);
           // 合并tweet和quotedContent 如果quotedContent存在，则将quotedContent的内容添加到tweet的内容中
+          const tweetText = tweet.text ?? "";
           const content = quotedContent
-            ? `${tweet.text}\n\n 【QuotedContent:${quotedContent.content}】`
-            : tweet.text;
+            ? `${tweetText}\n\n 【QuotedContent:${quotedContent.content}】`
+            : tweetText;
           // 合并media和quotedContent的media
           if (quotedContent?.media) {
             media = [...media, ...quotedContent.media];
           }
           return {
-            id: tweet.id,
-            title: tweet.text.split("\n")[0],
+            id: tweet.id ?? "",
+            title: tweetText.split("\n")[0],
             content: content,
-            url: tweet.url,
-            publishDate: formatDate(tweet.createdAt),
+            url: tweet.url ?? this.getTweetUrl(username, tweet.id),
+            publishDate: tweet.createdAt ? formatDate(tweet.createdAt) : "",
             media: media,
             metadata: {
               platform: "twitter",
@@ -105,37 +139,148 @@ export class TwitterScraper implements ContentScraper {
     }
   }
 
-  private getMediaList(extendedEntities: any): Media[] {
+  private async getOptionalConfig(
+    configManager: ConfigManager,
+    key: string,
+  ): Promise<string | undefined> {
+    try {
+      const value = await configManager.get<string>(key);
+      return typeof value === "string" ? value.trim() || undefined : undefined;
+    } catch (error) {
+      if (error instanceof ConfigurationError) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async fetchTweets(
+    query: string,
+    limit: number,
+  ): Promise<TweetRecord[]> {
+    if (this.xApiBearerToken) {
+      try {
+        return await this.fetchTwitterApiTweets(query);
+      } catch (error) {
+        if (!this.xquikApiKey) {
+          throw error;
+        }
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.warn(
+          "TwitterAPI.io request failed, falling back to Xquik:",
+          errorMsg,
+        );
+      }
+    }
+
+    if (this.xquikApiKey) {
+      return await this.fetchXquikTweets(query, limit);
+    }
+
+    throw new ConfigurationError(
+      "Configure X_API_BEARER_TOKEN or XQUIK_API_KEY for Twitter scraping",
+    );
+  }
+
+  private async fetchTwitterApiTweets(query: string): Promise<TweetRecord[]> {
+    const apiUrl =
+      `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${
+        encodeURIComponent(
+          query,
+        )
+      }&queryType=Top`;
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        "X-API-Key": `${this.xApiBearerToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorMsg = `Failed to fetch tweets: ${response.statusText}`;
+      throw new Error(errorMsg);
+    }
+
+    const tweets = await response.json() as TweetSearchResponse;
+    return tweets.tweets ?? [];
+  }
+
+  private async fetchXquikTweets(
+    query: string,
+    limit: number,
+  ): Promise<TweetRecord[]> {
+    const apiUrl = new URL("https://xquik.com/api/v1/x/tweets/search");
+    apiUrl.searchParams.set("q", query);
+    apiUrl.searchParams.set("queryType", "Top");
+    apiUrl.searchParams.set("limit", String(limit));
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        "x-api-key": `${this.xquikApiKey}`,
+        "xquik-api-contract": XQUIK_API_CONTRACT,
+      },
+    });
+
+    if (!response.ok) {
+      const errorMsg =
+        `Failed to fetch tweets from Xquik: ${response.statusText}`;
+      throw new Error(errorMsg);
+    }
+
+    const tweets = await response.json() as TweetSearchResponse;
+    return tweets.tweets ?? [];
+  }
+
+  private getMediaList(tweet: TweetRecord): Media[] {
     const mediaList: Media[] = [];
-    if (extendedEntities && extendedEntities.media) {
-      extendedEntities.media.forEach((media: any) => {
-        mediaList.push({
-          url: media.media_url_https,
-          type: media.type,
-          size: {
-            width: media.sizes.large.w,
-            height: media.sizes.large.h,
-          },
-        });
+    const tweetMedia = [
+      ...(tweet.extendedEntities?.media ?? []),
+      ...(tweet.media ?? []),
+    ];
+
+    for (const media of tweetMedia) {
+      const mediaUrl = media.media_url_https ?? media.mediaUrl ?? media.url;
+      if (!mediaUrl) {
+        continue;
+      }
+
+      mediaList.push({
+        url: mediaUrl,
+        type: media.type ?? "photo",
+        size: {
+          width: media.sizes?.large?.w ?? 0,
+          height: media.sizes?.large?.h ?? 0,
+        },
       });
     }
+
     return mediaList;
   }
 
-  private getQuotedContent(quoted_tweet: any): ScrapedContent | null {
+  private getQuotedContent(quoted_tweet?: TweetRecord): ScrapedContent | null {
     if (quoted_tweet) {
+      const tweetText = quoted_tweet.text ?? "";
       return {
-        id: quoted_tweet.id,
-        title: quoted_tweet.text.split("\n")[0],
-        content: quoted_tweet.text,
-        url: quoted_tweet.url,
-        publishDate: formatDate(quoted_tweet.createdAt),
-        media: this.getMediaList(quoted_tweet.extendedEntities),
+        id: quoted_tweet.id ?? "",
+        title: tweetText.split("\n")[0],
+        content: tweetText,
+        url: quoted_tweet.url ?? "",
+        publishDate: quoted_tweet.createdAt
+          ? formatDate(quoted_tweet.createdAt)
+          : "",
+        media: this.getMediaList(quoted_tweet),
         metadata: {
           platform: "twitter",
         },
       };
     }
     return null;
+  }
+
+  private getTweetUrl(username: string, tweetId?: string): string {
+    if (!tweetId) {
+      return "";
+    }
+    return `https://x.com/${username}/status/${tweetId}`;
   }
 }
