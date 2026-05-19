@@ -38,35 +38,35 @@ jobs:
             --target x86_64-pc-windows-msvc \
             --output dist/trendFinder-${VERSION}-windows-x64.exe \
             --icon ./docs/images/main.ico \
-            --include src/modules/render/templates \
+            --include src/modules/render/weixin/templates \
             src/test.ts
 
           # macOS (x64)
           deno compile --allow-env --allow-ffi --allow-read --allow-sys --allow-net \
             --target x86_64-apple-darwin \
             --output dist/trendFinder-${VERSION}-mac-x64 \
-            --include src/modules/render/templates \
+            --include src/modules/render/weixin/templates \
             src/test.ts
 
           # macOS (ARM64)
           deno compile --allow-env --allow-ffi --allow-read --allow-sys --allow-net \
             --target aarch64-apple-darwin \
             --output dist/trendFinder-${VERSION}-mac-arm64 \
-            --include src/modules/render/templates \
+            --include src/modules/render/weixin/templates \
             src/test.ts
 
           # Linux (x64)
           deno compile --allow-env --allow-ffi --allow-read --allow-sys --allow-net \
             --target x86_64-unknown-linux-gnu \
             --output dist/trendFinder-${VERSION}-linux-x64 \
-            --include src/modules/render/templates \
+            --include src/modules/render/weixin/templates \
             src/test.ts
 
           # Linux (ARM64)
           deno compile --allow-env --allow-ffi --allow-read --allow-sys --allow-net \
             --target aarch64-unknown-linux-gnu \
             --output dist/trendFinder-${VERSION}-linux-arm64 \
-            --include src/modules/render/templates \
+            --include src/modules/render/weixin/templates \
             src/test.ts
 
       - name: Compress Release Assets

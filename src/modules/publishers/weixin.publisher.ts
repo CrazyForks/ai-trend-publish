@@ -3,7 +3,6 @@ import {
   ContentPublisher,
   PublishResult,
 } from "@src/modules/interfaces/publisher.interface.ts";
-import { Buffer } from "node:buffer";
 import { Logger } from "@zilla/logger";
 const logger = new Logger("weixin-publisher");
 
@@ -16,6 +15,16 @@ interface WeixinToken {
 interface WeixinDraft {
   media_id: string;
   article_id?: string;
+}
+
+function toArrayBuffer(imageBuffer: ArrayBuffer | Uint8Array): ArrayBuffer {
+  if (imageBuffer instanceof ArrayBuffer) {
+    return imageBuffer;
+  }
+
+  const buffer = new ArrayBuffer(imageBuffer.byteLength);
+  new Uint8Array(buffer).set(imageBuffer);
+  return buffer;
 }
 
 export class WeixinPublisher implements ContentPublisher {
@@ -176,7 +185,7 @@ export class WeixinPublisher implements ContentPublisher {
    */
   async uploadContentImage(
     imageUrl: string,
-    imageBuffer?: Buffer,
+    imageBuffer?: ArrayBuffer | Uint8Array,
   ): Promise<string> {
     if (!imageUrl) {
       throw new Error("图片URL不能为空");
@@ -194,7 +203,7 @@ export class WeixinPublisher implements ContentPublisher {
         // 如果提供了压缩后的图片buffer，直接使用
         formData.append(
           "media",
-          new Blob([imageBuffer], { type: "image/jpeg" }),
+          new Blob([toArrayBuffer(imageBuffer)], { type: "image/jpeg" }),
           `image_${Math.random().toString(36).substring(2, 8)}.jpg`,
         );
       } else {

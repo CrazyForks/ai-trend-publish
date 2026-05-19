@@ -23,6 +23,25 @@ const StoriesSchema = zod.object({
   stories: zod.array(StorySchema),
 });
 
+type StoriesExtract = zod.infer<typeof StoriesSchema>;
+
+interface FirecrawlScrapeResult {
+  success?: boolean;
+  error?: string;
+  extract?: StoriesExtract;
+}
+
+interface FirecrawlScrapeClient {
+  scrape?: (
+    url: string,
+    params: Record<string, unknown>,
+  ) => Promise<FirecrawlScrapeResult>;
+  scrapeUrl?: (
+    url: string,
+    params: Record<string, unknown>,
+  ) => Promise<FirecrawlScrapeResult>;
+}
+
 export class FireCrawlScraper implements ContentScraper {
   private app!: FirecrawlApp;
 
@@ -77,8 +96,16 @@ export class FireCrawlScraper implements ContentScraper {
       !!
       `;
 
+      const firecrawlClient = this.app as FirecrawlScrapeClient;
+      const scrape = firecrawlClient.scrape?.bind(firecrawlClient) ??
+        firecrawlClient.scrapeUrl?.bind(firecrawlClient);
+
+      if (!scrape) {
+        throw new Error("Firecrawl SDK 未提供 scrape 方法");
+      }
+
       // 使用 FirecrawlApp 进行抓取
-      const scrapeResult = await this.app.scrapeUrl(sourceId, {
+      const scrapeResult = await scrape(sourceId, {
         formats: ["extract"],
         extract: {
           prompt: promptForFirecrawl,
@@ -86,7 +113,7 @@ export class FireCrawlScraper implements ContentScraper {
         },
       });
 
-      if (!scrapeResult.success || !scrapeResult.extract?.stories) {
+      if (scrapeResult.success === false || !scrapeResult.extract?.stories) {
         throw new Error(scrapeResult.error || "未获取到有效内容");
       }
 
