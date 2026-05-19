@@ -41,6 +41,25 @@ AI_SUMMARIZER_LLM_PROVIDER="QWEN:qwen-max"
 - `NEED_OPEN_COMMENT`
 - `ONLY_FANS_CAN_COMMENT`
 - `AUTHOR`
+- `ARTICLE_TEMPLATE_TYPE`: 微信文章模板类型。
+
+文章模板可选值：
+
+- `default`: 微信原生正式风
+- `modern`: 蓝青科技资讯风
+- `tech`: 工程技术专栏风
+- `mianpro`: AI 日报风
+- `longform`: 杂志长文风
+- `product`: 更新日志风
+- `minimal`: 极简阅读风
+- `darktech`: 深色研究笔记风
+- `random`: 每次随机选择一个模板
+
+示例：
+
+```bash
+ARTICLE_TEMPLATE_TYPE="minimal"
+```
 
 ### 4. 定时任务与工作流映射
 

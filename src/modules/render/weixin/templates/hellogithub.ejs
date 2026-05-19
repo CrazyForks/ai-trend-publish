@@ -1,7 +1,7 @@
 <% function formatNumber(num) { return num >= 1000 ? (num / 1000).toFixed(1) +
 'k' : num; } %>
 
-<div
+<section
   style="
     max-width: 100%;
     margin: 0 auto;
@@ -11,7 +11,7 @@
     background: #fafbfc;
   "
 >
-  <div
+  <section
     style="
       font-size: 20px;
       font-weight: bold;
@@ -21,8 +21,8 @@
     "
   >
     GitHub AI 相关热门仓库
-  </div>
-  <div
+  </section>
+  <section
     style="
       font-size: 14px;
       color: #666;
@@ -31,9 +31,9 @@
     "
   >
     更新时间：<%= renderDate %>
-  </div>
+  </section>
 
-  <div
+  <section
     style="
       margin: 16px 0;
       padding: 12px;
@@ -42,7 +42,7 @@
       border: 1px solid #e9ecef;
     "
   >
-    <div
+    <section
       style="
         font-size: 15px;
         font-weight: bold;
@@ -53,9 +53,9 @@
       "
     >
       📑 目录
-    </div>
+    </section>
     <% items.forEach((item, index) => { %>
-    <div
+    <section
       style="
         display: flex;
         align-items: center;
@@ -80,7 +80,7 @@
         "
         ><%= index + 1 %></span
       >
-      <div
+      <section
         style="
           flex: 1;
           display: flex;
@@ -105,13 +105,13 @@
         >
           <%= item.title %>
         </span>
-      </div>
-    </div>
+      </section>
+    </section>
     <% }); %>
-  </div>
+  </section>
 
   <% items.forEach((item, index) => { %>
-  <div
+  <section
     style="
       margin-bottom: 25px;
       padding: 20px;
@@ -121,7 +121,7 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     "
   >
-    <div
+    <section
       style="
         font-size: 18px;
         font-weight: bold;
@@ -147,9 +147,9 @@
         ><%= index < 3 ? ['🏆','🥈','🥉'][index] : (index + 1) %></span
       >
       <%= item.name %>
-    </div>
+    </section>
 
-    <div
+    <section
       style="
         font-size: 15px;
         color: #666;
@@ -164,9 +164,9 @@
       "
     >
       <%= item.title %>
-    </div>
+    </section>
 
-    <div
+    <section
       style="
         display: flex;
         align-items: center;
@@ -226,9 +226,9 @@
         本周新增 <%= formatNumber(item.lastWeekStars) %>
       </span>
       <% } %>
-    </div>
+    </section>
 
-    <div
+    <section
       style="
         display: flex;
         align-items: center;
@@ -267,9 +267,9 @@
           ><%= item.language %></span
         >
       </span>
-    </div>
+    </section>
 
-    <div
+    <section
       style="
         font-size: 15px;
         line-height: 1.6;
@@ -282,10 +282,10 @@
       "
     >
       <%= item.description %>
-    </div>
+    </section>
 
     <% if (item.tags && item.tags.length > 0) { %>
-    <div style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px">
+    <section style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px">
       <% item.tags.forEach(tag => { %>
       <span
         style="
@@ -299,30 +299,30 @@
         ><%= tag %></span
       >
       <% }); %>
-    </div>
+    </section>
     <% } %>
 
-    <div
+    <section
       style="
         margin-top: 15px;
         padding-top: 15px;
         border-top: 1px dashed #eaeaea;
       "
     >
-      <div style="font-size: 14px; color: #07c160; margin-bottom: 8px">
+      <section style="font-size: 14px; color: #07c160; margin-bottom: 8px">
         📎 GitHub
-      </div>
-      <div style="font-size: 14px; color: #666; word-break: break-all">
+      </section>
+      <section style="font-size: 14px; color: #666; word-break: break-all">
         <%= item.url %>
-      </div>
+      </section>
 
       <% if (item.relatedUrls && item.relatedUrls.length > 0) { %>
-      <div style="margin-top: 12px">
-        <div style="font-size: 14px; color: #07c160; margin-bottom: 8px">
+      <section style="margin-top: 12px">
+        <section style="font-size: 14px; color: #07c160; margin-bottom: 8px">
           🔗 相关链接
-        </div>
+        </section>
         <% item.relatedUrls.forEach(link => { %>
-        <div
+        <section
           style="
             display: flex;
             align-items: center;
@@ -337,17 +337,17 @@
           <span style="color: #666; word-break: break-all"
             ><%= link.url %></span
           >
-        </div>
+        </section>
         <% }); %>
-      </div>
+      </section>
       <% } %>
-    </div>
-  </div>
+    </section>
+  </section>
   <% }); %>
 
-  <div
+  <section
     style="font-size: 14px; color: #666; text-align: center; margin-top: 20px"
   >
     数据来源：HelloGitHub
-  </div>
-</div>
+  </section>
+</section>

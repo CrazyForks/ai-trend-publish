@@ -124,7 +124,9 @@ npm run docs:build
 
 ## 📝 文章模板
 
-TrendPublish 提供了多种精美的文章模板。查看
+TrendPublish 提供了多种微信公众号文章模板，可通过
+`ARTICLE_TEMPLATE_TYPE` 选择：`default`、`modern`、`tech`、`mianpro`、
+`longform`、`product`、`minimal`、`darktech` 或 `random`。查看
 [模板展示页面](https://liyown.github.io/ai-trend-publish/templates)
 了解更多详情。
 
@@ -335,7 +337,7 @@ docker run -d \
 
 ### 2. 开发模板
 
-在 `src/templates` 目录下按照对应模块开发 EJS 模板
+在 `src/modules/render/weixin/templates` 目录下按照对应模块开发 EJS 模板。
 
 ### 3. 注册模板
 
@@ -344,7 +346,7 @@ docker run -d \
 ### 4. 测试渲染效果
 
 ```
-npx ts-node -r tsconfig-paths/register src\modules\render\test\test.weixin.template.ts
+deno test -A --no-check src/modules/render/weixin/test/test.weixin.template.ts
 ```
 
 ## 🤝 贡献指南

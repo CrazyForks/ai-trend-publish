@@ -1,64 +1,82 @@
-<div style="
-    max-width: 800px;
+<%
+function renderContentBlock(html) {
+  return (html || "")
+    .replace(/<img\b([^>]*)\/?>/gi, function(_, attrs) {
+      attrs = attrs.replace(/\sstyle=(["']).*?\1/gi, "").replace(/\/\s*$/, "");
+      return '<img' + attrs + ' style="max-width:100%;display:block;margin:18px auto;border-radius:10px;box-shadow:0 6px 18px rgba(7,193,96,0.10);" />';
+    })
+    .replace(/<strong>/gi, '<strong style="font-weight:700;color:#067647;background:linear-gradient(180deg, transparent 58%, rgba(7,193,96,0.14) 58%);padding:0 2px;">')
+    .replace(/<em>/gi, '<em style="font-style:normal;color:#067647;">')
+    .replace(/<ul>/gi, '<section style="margin:14px 0;padding:0;">')
+    .replace(/<\/ul>/gi, '</section>')
+    .replace(/<ol>/gi, '<section style="margin:14px 0;padding:0;">')
+    .replace(/<\/ol>/gi, '</section>')
+    .replace(/<li>/gi, '<p style="margin:8px 0;padding:9px 12px;background:#f8fcf9;border-left:3px solid rgba(7,193,96,0.72);border-radius:6px;font-size:15px;line-height:1.75;color:#333333;">')
+    .replace(/<\/li>/gi, '</p>');
+}
+%>
+<section style="
+    max-width: 100%;
     margin: 0 auto;
-    padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-      'Helvetica Neue', Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
+    padding: 18px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+    line-height: 1.75;
+    color: #333333;
+    background: #ffffff;
   ">
-  <!-- 目录部分 -->
-  <div style="
-      margin: 10px auto;
-      padding: 10px 15px;
-      border-left: 3px solid #999;
-      background-color: #f8f8f8;
-      font-size: 13px;
-      color: #666;
-    ">
-    <p style="
-        font-size: 14px;
-        font-weight: bold;
-        color: #666;
-        margin-bottom: 8px;
-        padding-left: 5px;
-      ">
-      目录
+  <section style="margin:0 0 28px;padding:20px 18px;background:linear-gradient(180deg, #f4fbf7, #ffffff);border-radius:14px;border:1px solid #dcefe4;border-left:5px solid #07c160;box-shadow:0 6px 16px rgba(7,193,96,0.07);">
+    <p style="margin:0 0 6px;color:#8a9a91;font-size:12px;font-weight:700;line-height:1.2;letter-spacing:0.08em;">
+      WECHAT BRIEF
     </p>
-    <% for(var i=0; i<articles.length; i++) { var article=articles[i]; var bgColor=i % 2===0 ? '#f8f8f8' : '#f2f2f2' ;
-      %>
-      <p style="margin: 3px 0; padding: 4px 8px; background-color: <%= bgColor %>;">
-        <span style="color: #999; font-weight: 500; margin-right: 5px; font-size: 12px;">
-          <%= i + 1 %>.
+    <p style="margin:0 0 16px;font-size:21px;font-weight:800;color:#163325;line-height:1.35;">
+      今日精选目录
+    </p>
+    <% for(var i=0; i<articles.length; i++) { var article=articles[i]; %>
+      <section style="
+          margin: 8px 0;
+          padding: 12px 14px;
+          background: #ffffff;
+          border-radius: 8px;
+          border: 1px solid #e4f3e9;
+          border-left: 4px solid #07c160;
+          color: #333333;
+          font-size: 14px;
+          line-height: 1.6;
+        ">
+        <span style="display:inline-block;color:#07c160;font-weight:700;margin-right:6px;">
+          <%= (i + 1).toString().padStart(2, '0') %>
         </span>
-        <span style="color: #666; font-size: 12px;">
-          <%= article.title %>
-        </span>
-      </p>
-      <% } %>
-  </div>
-
-  <!-- 文章内容部分 -->
-  <% for(var j=0; j<articles.length; j++) { var article=articles[j]; %>
-    <div style="margin: 30px 0; padding: 0 10px;">
-      <h3
-        style="font-size: 18px; color: #333; margin-bottom: 15px; border-bottom: 2px solid #07c160; padding-bottom: 10px;">
-        <span style="color: #07c160; margin-right: 10px;">
-          <%= j + 1 %>.
-        </span>
-        <%= article.title %>
-      </h3>
-      <p style="font-size: 12px; color: #999; margin: 10px 0;">
-        <%= article.publishDate %>
-      </p>
-      <div style="font-size: 15px; color: #333; line-height: 1.8; margin: 20px 0;">
-        <% var content=article.content || "" ; var paragraphs=content.split("<next_paragraph />");
-        %>
-        <% for(var i=0; i<paragraphs.length; i++) { var para=paragraphs[i].trim(); if(para.length> 0) {
-          %>
-          <p style="margin: 15px 0;"><%- para %></p>
-          <% }} %>
-      </div>
-    </div>
+        <span><%= article.title %></span>
+      </section>
     <% } %>
-</div>
+  </section>
+
+  <% for(var j=0; j<articles.length; j++) { var article=articles[j]; %>
+    <section style="margin: 38px 0;">
+      <section style="margin:0 0 20px;padding:18px 16px;background:linear-gradient(90deg, rgba(7,193,96,0.10), rgba(7,193,96,0.02));border-left:5px solid #07c160;border-radius:12px;border-top:1px solid #e4f3e9;border-right:1px solid #e4f3e9;border-bottom:1px solid #e4f3e9;">
+        <p style="margin:0 0 8px;color:#07c160;font-size:12px;font-weight:800;line-height:1.2;letter-spacing:0.06em;">
+          NO.<%= (j + 1).toString().padStart(2, '0') %>
+        </p>
+        <h3 style="margin:0;color:#163325;font-size:21px;font-weight:800;line-height:1.45;">
+          <%= article.title %>
+        </h3>
+        <p style="margin:8px 0 0;color:#8a8f8c;font-size:13px;line-height:1.4;">
+          <%= article.publishDate %>
+        </p>
+      </section>
+
+      <section style="padding: 0 2px 0 4px;">
+        <% var content=article.content || ""; var paragraphs=content.split("<next_paragraph />");
+        for(var i=0; i<paragraphs.length; i++) { var para=paragraphs[i].trim(); if(para.length>0) { %>
+          <section style="margin:0 0 19px;color:#333333;font-size:15px;line-height:1.9;text-align:left;letter-spacing:0.02em;">
+            <%- renderContentBlock(para) %>
+          </section>
+        <% }} %>
+      </section>
+    </section>
+
+    <% if (j < articles.length - 1) { %>
+      <section style="margin:38px auto;width:64%;height:2px;background:linear-gradient(90deg, rgba(7,193,96,0), rgba(7,193,96,0.58), rgba(7,193,96,0));font-size:0;line-height:0;">&nbsp;</section>
+    <% } %>
+  <% } %>
+</section>

@@ -1,137 +1,75 @@
-<!-- 主容器 -->
-<div style="
-    margin: 0 12px;
-    padding: 16px 0;
-    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    line-height: 1.6;
-    color: #1a1a1a;
+<%
+function renderContentBlock(html) {
+  return (html || "")
+    .replace(/<img\b([^>]*)\/?>/gi, function(_, attrs) {
+      attrs = attrs.replace(/\sstyle=(["']).*?\1/gi, "").replace(/\/\s*$/, "");
+      return '<img' + attrs + ' style="max-width:100%;display:block;margin:20px auto;border-radius:8px;border:1px solid #e5e6eb;box-shadow:0 6px 18px rgba(22,93,255,0.10);" />';
+    })
+    .replace(/<strong>/gi, '<strong style="font-weight:700;color:#165dff;">')
+    .replace(/<em>/gi, '<em style="font-style:normal;color:#4080ff;">')
+    .replace(/<ul>/gi, '<section style="margin:16px 0;padding:0;">')
+    .replace(/<\/ul>/gi, '</section>')
+    .replace(/<ol>/gi, '<section style="margin:16px 0;padding:0;">')
+    .replace(/<\/ol>/gi, '</section>')
+    .replace(/<li>/gi, '<p style="margin:8px 0;padding:10px 12px;background:#f7f8fa;border-left:3px solid #165dff;border-radius:4px;font-size:15px;line-height:1.75;color:#1d2129;">')
+    .replace(/<\/li>/gi, '</p>');
+}
+%>
+<section style="
+    margin: 0 auto;
+    max-width: 100%;
+    padding: 18px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    line-height: 1.75;
+    color: #1d2129;
     background: #ffffff;
   ">
-  <!-- 目录部分 -->
-  <div style="
-      margin: 20px 8px;
-      padding: 20px;
-      background: #f7f8fa;
-      border-radius: 8px;
-    ">
-    <div style="
-          margin-bottom: 20px;
-          padding-bottom: 12px;
-          border-bottom: 2px solid #1677ff;
-          color: #1677ff;
-          font-size: 18px;
-          font-weight: bold;
-        ">
-      目录导航
-    </div>
+  <section style="margin:0 0 32px;padding:22px 18px;background:#f7f8fa;border-radius:12px;border:1px solid #e5e6eb;border-top:4px solid #165dff;">
+    <p style="margin:0 0 8px;color:#86909c;font-size:12px;font-weight:800;line-height:1.2;letter-spacing:0.08em;">
+      ENGINEERING NOTES
+    </p>
+    <p style="margin:0 0 16px;color:#165dff;font-size:21px;font-weight:800;line-height:1.35;">
+      技术专栏目录
+    </p>
 
     <% for(var i=0; i<articles.length; i++) { var article=articles[i]; %>
-      <div style="
-              margin: 12px 0;
-              padding: 16px;
-              background: #ffffff;
-              border-radius: 6px;
-              border-left: 4px solid #1677ff;
-            ">
-        <span style="
-                  display: inline-block;
-                  min-width: 24px;
-                  height: 24px;
-                  line-height: 24px;
-                  text-align: center;
-                  background: #1677ff;
-                  color: #ffffff;
-                  font-size: 14px;
-                  font-weight: bold;
-                  border-radius: 4px;
-                  margin-right: 12px;
-                ">
-          <%= (i + 1).toString().padStart(2, '0' ) %>
-        </span>
-        <span style="
-                  color: #1a1a1a;
-                  font-size: 15px;
-                  font-weight: 500;
-                ">
+      <section style="margin:10px 0;padding:12px 14px;background:#ffffff;border-radius:8px;border-left:4px solid #165dff;border:1px solid #edf0f5;">
+        <p style="margin:0;color:#1d2129;font-size:14px;font-weight:600;line-height:1.65;">
+          <span style="display:inline-block;margin-right:8px;padding:2px 6px;background:#165dff;color:#ffffff;border-radius:4px;font-size:12px;font-weight:700;">
+            <%= (i + 1).toString().padStart(2, '0') %>
+          </span>
           <%= article.title %>
-        </span>
-      </div>
-      <% } %>
-  </div>
+        </p>
+      </section>
+    <% } %>
+  </section>
 
-  <!-- 文章内容部分 -->
   <% for(var j=0; j<articles.length; j++) { var article=articles[j]; %>
-    <div style="
-          margin: 32px 8px;
-          padding: 24px;
-          background: #ffffff;
-          border: 1px solid #eaeaea;
-          border-radius: 8px;
-        ">
-      <!-- 文章标题区 -->
-      <div style="
-              margin-bottom: 24px;
-              padding: 16px;
-              background: #f7f8fa;
-              border-radius: 6px;
-            ">
-        <!-- 编号标签 -->
-        <div style="
-                  margin-bottom: 12px;
-                  color: #1677ff;
-                  font-size: 14px;
-                  font-weight: bold;
-                ">
-          NO.<%= (j + 1).toString().padStart(2, '0' ) %>
-        </div>
-
-        <!-- 标题 -->
-        <div style="
-                  font-size: 22px;
-                  font-weight: bold;
-                  color: #1a1a1a;
-                  margin-bottom: 12px;
-                  line-height: 1.4;
-                ">
+    <section style="margin: 38px 0;padding:18px 16px;background:#ffffff;border:1px solid #e5e6eb;border-radius:10px;">
+      <section style="margin:0 0 20px;padding:17px 16px;background:#f7f8fa;border-radius:8px;border-top:4px solid #165dff;">
+        <p style="margin:0 0 10px;color:#165dff;font-size:12px;font-weight:800;line-height:1.4;letter-spacing:0.06em;">
+          NO.<%= (j + 1).toString().padStart(2, '0') %>
+        </p>
+        <h3 style="margin:0;color:#1d2129;font-size:22px;font-weight:800;line-height:1.45;">
           <%= article.title %>
-        </div>
-
-        <!-- 发布日期 -->
-        <div style="
-                  color: #666666;
-                  font-size: 13px;
-                ">
+        </h3>
+        <p style="margin:8px 0 0;color:#86909c;font-size:13px;line-height:1.4;">
           <%= article.publishDate %>
-        </div>
-      </div>
+        </p>
+      </section>
 
-      <!-- 文章内容 -->
-      <div style="
-              padding: 0 16px;
-              background: #ffffff;
-            ">
-        <% var content=article.content || "" ; var paragraphs=content.split("<next_paragraph />");
-        for(var i=0; i<paragraphs.length; i++) { var para=paragraphs[i].trim(); if(para.length> 0) {
-          %>
-          <p style="
-                      margin: 0 0 16px;
-                      line-height: 1.8;
-                      color: #262626;
-                      font-size: 15px;
-                      text-align: justify;
-                    "><%- para %></p>
-          <% }} %>
-      </div>
-    </div>
+      <section style="padding:0 2px 0 4px;">
+        <% var content=article.content || ""; var paragraphs=content.split("<next_paragraph />");
+        for(var i=0; i<paragraphs.length; i++) { var para=paragraphs[i].trim(); if(para.length>0) { %>
+          <section style="margin:0 0 19px;line-height:1.9;color:#1d2129;font-size:15px;text-align:left;letter-spacing:0.02em;">
+            <%- renderContentBlock(para) %>
+          </section>
+        <% }} %>
+      </section>
+    </section>
 
-    <!-- 文章分隔 -->
     <% if (j < articles.length - 1) { %>
-      <div style="
-              margin: 0 auto;
-              width: 120px;
-              height: 2px;
-              background: #eaeaea;
-            "></div>
-      <% } %>
-        <% } %>
-</div>
+      <section style="margin:38px auto;width:128px;height:2px;background:#d9e8ff;font-size:0;line-height:0;">&nbsp;</section>
+    <% } %>
+  <% } %>
+</section>

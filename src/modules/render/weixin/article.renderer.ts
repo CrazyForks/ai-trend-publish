@@ -11,7 +11,16 @@ export class WeixinArticleTemplateRenderer
   extends BaseTemplateRenderer<WeixinTemplate[]> {
   constructor() {
     super("article");
-    this.availableTemplates = ["default", "modern", "tech", "mianpro"];
+    this.availableTemplates = [
+      "default",
+      "modern",
+      "tech",
+      "mianpro",
+      "longform",
+      "product",
+      "minimal",
+      "darktech",
+    ];
   }
 
   /**
@@ -80,6 +89,18 @@ export class WeixinArticleTemplateRenderer
       ),
       mianpro: await this.getTemplateContent(
         "/templates/article.mianpro.ejs",
+      ),
+      longform: await this.getTemplateContent(
+        "/templates/article.longform.ejs",
+      ),
+      product: await this.getTemplateContent(
+        "/templates/article.product.ejs",
+      ),
+      minimal: await this.getTemplateContent(
+        "/templates/article.minimal.ejs",
+      ),
+      darktech: await this.getTemplateContent(
+        "/templates/article.darktech.ejs",
       ),
     };
   }
