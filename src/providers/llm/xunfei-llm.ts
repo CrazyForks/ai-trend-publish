@@ -5,6 +5,7 @@ import {
   ChatMessage,
   LLMProvider,
 } from "@src/providers/interfaces/llm.interface.ts";
+import { normalizeLLMResponse } from "@src/utils/llm-output.ts";
 
 interface XunfeiMessage {
   role: "system" | "user" | "assistant";
@@ -49,7 +50,7 @@ export class XunfeiLLM implements LLMProvider {
   }
 
   async setModel(model: string): Promise<void> {
-    this.defaultModel = model
+    this.defaultModel = model;
   }
 
   async refresh(): Promise<void> {
@@ -125,7 +126,7 @@ export class XunfeiLLM implements LLMProvider {
       }
 
       // 转换为标准格式返回
-      return {
+      return normalizeLLMResponse({
         id: response.sid,
         object: "chat.completion",
         created: Date.now(),
@@ -139,7 +140,7 @@ export class XunfeiLLM implements LLMProvider {
           finish_reason: "stop",
         })),
         usage: response.usage,
-      };
+      });
     } catch (error) {
       throw new Error(`创建聊天完成失败: ${(error as Error).message}`);
     }

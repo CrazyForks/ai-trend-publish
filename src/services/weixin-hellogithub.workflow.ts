@@ -14,8 +14,8 @@ import { Logger } from "@zilla/logger";
 import { BarkNotifier } from "@src/modules/notify/bark.notify.ts";
 import { ImageGeneratorType } from "@src/providers/interfaces/image-gen.interface.ts";
 import { LLMFactory } from "@src/providers/llm/llm-factory.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
 import { runConcurrentTasks } from "@src/utils/concurrency/concurrency-limiter.ts";
+import { cleanLLMText } from "@src/utils/llm-output.ts";
 const logger = new Logger("weixin-hellogithub-workflow");
 
 interface WeixinHelloGithubWorkflowEnv {
@@ -94,11 +94,7 @@ export class WeixinHelloGithubWorkflow extends WorkflowEntrypoint<
             return await this.scraper.getItemDetail(item.itemId);
           }),
         );
-        const LLMProvider = await LLMFactory.getInstance().getLLMProvider(
-          await ConfigManager.getInstance().get(
-            "AI_SUMMARIZER_LLM_PROVIDER",
-          ),
-        );
+        const LLMProvider = await LLMFactory.getInstance().getDefaultProvider();
 
         // 对每个项目的描述进行润色
         logger.info("[内容润色] 开始对项目描述进行润色");
@@ -128,8 +124,11 @@ export class WeixinHelloGithubWorkflow extends WorkflowEntrypoint<
                   enhancedDescription.choices[0]?.message?.content
                 }`,
               );
-              item.description = enhancedDescription.choices[0]?.message
-                ?.content;
+              const polishedDescription = enhancedDescription.choices[0]
+                ?.message?.content;
+              if (polishedDescription) {
+                item.description = cleanLLMText(polishedDescription);
+              }
             }
             return item;
           } catch (error) {

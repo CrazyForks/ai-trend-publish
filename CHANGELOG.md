@@ -4,6 +4,17 @@
 
 ### 微信文章模板
 
+- 新增 `dynamic` 微信文章模板，支持根据文章内容调用 AI 实时生成公众号内联 HTML。
+- 新增动态模板后处理与校验，清理公众号不兼容标签和属性，并在生成失败时回退
+  `minimal`。
+- 简化模型配置，内容排序、摘要、标题和动态模板默认统一使用 `LLM_*` 配置。
+- 新增 `deno task doctor` 配置体检命令，方便快速定位缺失环境变量。
+- 新增 `deno task preview:weixin` 微信模板预览命令。
+- 新增 `deno task run:article:dry` 微信文章 dry-run 调试模式，跳过发布并输出本地
+  HTML。
+- 统一清理 LLM 输出中的 `<think>` 和 Markdown
+  代码围栏，覆盖排序、摘要、标题、动态模板与内容润色。
+- 拆分微信文章标题、封面、渲染和 dry-run 输出逻辑，降低 workflow 主流程复杂度。
 - 新增 `longform`、`product`、`minimal`、`darktech` 四套微信文章模板。
 - 优化 `default`、`modern`、`tech`、`mianpro` 模板的公众号兼容性与排版层级。
 - 将微信模板结构统一调整为更适合公众号编辑器的内联样式与 `section` 标签。

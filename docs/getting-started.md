@@ -21,23 +21,36 @@ cp .env.example .env
 至少先完成以下变量：
 
 - `SERVER_API_KEY`
+- `LLM_BASE_URL`
+- `LLM_API_KEY`
+- `LLM_MODEL`
+
+正式发布公众号时再配置：
+
 - `WEIXIN_APP_ID`
 - `WEIXIN_APP_SECRET`
-- 你使用的模型供应商 API Key（如 `DEEPSEEK_API_KEY`）
 
-如需抓取增强能力，再配置：
+跑微信文章工作流时，至少配置一种抓取源：
 
 - `FIRE_CRAWL_API_KEY`
-- `JINA_API_KEY`
+- `X_API_BEARER_TOKEN` 或 `XQUIK_API_KEY`
+
+更多功能开关和必填项见 [配置说明](/configuration)。
 
 ## 4. 本地启动
 
 ```bash
-# 启动主服务（含定时任务 + JSON-RPC 服务）
-deno task start
+# 检查配置是否完整
+deno task doctor
 
-# 运行一次测试流程
-deno task test
+# 启动主服务（含定时任务 + JSON-RPC 服务）
+deno task dev
+
+# 预览微信模板
+deno task preview
+
+# dry-run 跑一次微信文章流程，不真正发布
+deno task article:dry
 ```
 
 默认会启动在 `http://localhost:8000`，并暴露 `POST /api/workflow`。
@@ -52,7 +65,8 @@ curl -X POST http://localhost:8000/api/workflow \
     "jsonrpc": "2.0",
     "method": "triggerWorkflow",
     "params": {
-      "workflowType": "weixin-article-workflow"
+      "workflowType": "weixin-article-workflow",
+      "dryRun": true
     },
     "id": 1
   }'
@@ -70,7 +84,7 @@ npm run docs:build
 
 ```bash
 # Windows
-deno task build:win
+deno task build:windows
 
 # macOS
 deno task build:mac-x64

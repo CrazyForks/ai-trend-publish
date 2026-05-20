@@ -1,16 +1,40 @@
 {
   "nodeModulesDir": "auto",
   "tasks": {
+    "workflow:test": "deno run -A src/test.ts",
     "start": "deno run -A src/index.ts",
-    "test": "deno run -A  src/test.ts",
-    "build:win": "deno compile -A --target x86_64-pc-windows-msvc --output trendFinder.exe --icon ./docs/images/main.ico --include src/modules/render/templates src/test.ts ",
-    "build:mac-x64": "deno compile -A --target x86_64-apple-darwin --output trendFinder-mac-x64 --include src/modules/render/templates src/test.ts ",
-    "build:mac-arm64": "deno compile -A --target aarch64-apple-darwin --output trendFinder-mac-arm64 --include src/modules/render/templates src/test.ts ",
-    "build:linux-x64": "deno compile -A --target x86_64-unknown-linux-gnu --output trendFinder-linux-x64 --include src/modules/render/templates src/test.ts ",
-    "build:linux-arm64": "deno compile -A --target aarch64-unknown-linux-gnu --output trendFinder-linux-arm64 --include src/modules/render/templates src/test.ts ",
-    "build:all": "deno task build:win && deno task build:mac-x64 && deno task build:mac-arm64 && deno task build:linux-x64 && deno task build:linux-arm64",
-    "build:docs": "npm run docs:build",
-    "dev:docs": "npm run docs:dev"
+    "dev": "deno task start",
+    "doctor": "deno run -A scripts/doctor.ts",
+    "check": "deno check src/index.ts src/test.ts scripts/run.workflow.ts scripts/preview.weixin.ts scripts/doctor.ts",
+    "fmt": "deno fmt",
+    "fmt:check": "deno fmt --check",
+    "lint": "deno lint",
+    "verify": "deno task fmt:check && deno task lint && deno task check && deno task test",
+    "test": "deno task test:unit",
+    "test:unit": "deno test -A --no-check src/utils/llm-output.test.ts src/modules/content-rank/ai.content-ranker.test.ts src/services/weixin-article.workflow.test.ts src/modules/render/weixin/dynamic src/modules/render/weixin/test/test.weixin.dynamic.template.ts src/modules/render/weixin/test/test.weixin.template.ts",
+    "test:all": "deno test -A --no-check",
+    "workflow": "deno run -A scripts/run.workflow.ts",
+    "article": "deno task workflow --workflow weixin-article-workflow",
+    "article:dry": "deno task workflow --workflow weixin-article-workflow --dry-run",
+    "preview": "deno run -A scripts/preview.weixin.ts",
+    "preview:weixin": "deno task preview",
+    "run:article": "deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow",
+    "run:article:dry": "deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow --dry-run",
+    "build": "deno compile -A --include src/modules/render/weixin/templates --output trendFinder src/test.ts",
+    "build:windows": "deno compile -A --target x86_64-pc-windows-msvc --output trendFinder.exe --icon ./docs/images/main.ico --include src/modules/render/weixin/templates src/test.ts",
+    "build:mac": "deno task build:mac-arm64",
+    "build:mac-x64": "deno compile -A --target x86_64-apple-darwin --output trendFinder-mac-x64 --include src/modules/render/weixin/templates src/test.ts",
+    "build:mac-arm64": "deno compile -A --target aarch64-apple-darwin --output trendFinder-mac-arm64 --include src/modules/render/weixin/templates src/test.ts",
+    "build:linux": "deno task build:linux-x64",
+    "build:linux-x64": "deno compile -A --target x86_64-unknown-linux-gnu --output trendFinder-linux-x64 --include src/modules/render/weixin/templates src/test.ts",
+    "build:linux-arm64": "deno compile -A --target aarch64-unknown-linux-gnu --output trendFinder-linux-arm64 --include src/modules/render/weixin/templates src/test.ts",
+    "build:all": "deno task build:windows && deno task build:mac-x64 && deno task build:mac-arm64 && deno task build:linux-x64 && deno task build:linux-arm64",
+    "build:win": "deno task build:windows",
+    "docs": "deno task docs:dev",
+    "docs:dev": "npm run docs:dev",
+    "docs:build": "npm run docs:build",
+    "dev:docs": "deno task docs:dev",
+    "build:docs": "deno task docs:build"
   },
   "imports": {
     "@deno-library/progress": "jsr:@deno-library/progress@^1.5.1",
@@ -31,7 +55,8 @@
   ],
   "lint": {
     "exclude": [
-      "src/templates"
+      "src/templates",
+      "src/modules/render/weixin/templates"
     ],
     "rules": {
       "exclude": [

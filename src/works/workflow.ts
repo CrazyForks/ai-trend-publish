@@ -140,12 +140,22 @@ export class WorkflowStep {
     fn: () => Promise<T>,
     timeout: number,
   ): Promise<T> {
-    return Promise.race([
-      fn(),
-      new Promise<T>((_, reject) => {
-        setTimeout(() => reject(new Error("Step timeout")), timeout);
-      }),
-    ]);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        fn(),
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error("Step timeout")),
+            timeout,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 
   private parseDelay(delay: string | number): number {

@@ -7,23 +7,17 @@ import {
   getUserPrompt,
 } from "@src/prompts/content-ranker.prompt.ts";
 import { RankResult } from "@src/modules/interfaces/content-ranker.interface.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
 import { Logger } from "@zilla/logger";
+import { stripMarkdownFence } from "@src/utils/llm-output.ts";
 
 const logger = new Logger("ai-content-ranker");
 
 export class ContentRanker {
   private llmFactory: LLMFactory;
-  private configInstance: ConfigManager;
 
   constructor() {
     this.llmFactory = LLMFactory.getInstance();
-    this.configInstance = ConfigManager.getInstance();
-    this.configInstance.get("AI_CONTENT_RANKER_LLM_PROVIDER").then(
-      (provider) => {
-        logger.info(`Ranker当前使用的LLM模型: ${provider}`);
-      },
-    );
+    logger.info("Ranker使用统一LLM配置");
   }
 
   public async rankContents(contents: ScrapedContent[]): Promise<RankResult[]> {
@@ -33,9 +27,7 @@ export class ContentRanker {
 
     return RetryUtil.retryOperation(
       async () => {
-        const llmProvider = await this.llmFactory.getLLMProvider(
-          await this.configInstance.get("AI_CONTENT_RANKER_LLM_PROVIDER"),
-        );
+        const llmProvider = await this.llmFactory.getDefaultProvider();
         const messages: ChatMessage[] = [
           { role: "system", content: getSystemPrompt() },
           { role: "user", content: getUserPrompt(contents) },
@@ -73,26 +65,67 @@ export class ContentRanker {
   }
 }
 
-function parseRankingResult(result: string): RankResult[] {
-  const lines = result.trim().split("\n");
-  return lines.map((line) => {
-    const cleanedLine = line.replace(/文章ID[:：]?/i, "").trim();
-    const match = cleanedLine.match(/^(\S+)(?:[\s:：]+(\d+(?:\.\d+)?)$)/);
+export function parseRankingResult(result: string): RankResult[] {
+  const lines = stripReasoningContent(result)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-    if (!match) {
-      throw new Error(`Invalid format for line: ${line}`);
-    }
-
-    const [, id, scoreStr] = match;
-    const score = parseFloat(scoreStr);
-
-    if (isNaN(score)) {
-      throw new Error(`Invalid score format for line: ${line}`);
-    }
-
-    // 清理ID末尾的冒号
-    const cleanedId = id.replace(/[:：]$/, "");
-
-    return { id: cleanedId, score };
+  const rankings = lines.flatMap((line) => {
+    const parsed = parseRankingLine(line);
+    return parsed ? [parsed] : [];
   });
+
+  if (!rankings.length) {
+    throw new Error(`未解析到有效的评分结果: ${result.slice(0, 200)}`);
+  }
+
+  return rankings;
+}
+
+function stripReasoningContent(result: string): string {
+  let cleaned = stripMarkdownFence(result)
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+    .trim();
+
+  const unclosedThinkIndex = cleaned.search(/<think\b[^>]*>/i);
+  if (unclosedThinkIndex >= 0) {
+    const afterThink = cleaned
+      .slice(unclosedThinkIndex)
+      .replace(/<think\b[^>]*>/i, "");
+    const firstRankingLineIndex = afterThink
+      .split("\n")
+      .findIndex((line) => parseRankingLine(line.trim()) !== null);
+
+    if (firstRankingLineIndex >= 0) {
+      cleaned = afterThink.split("\n").slice(firstRankingLineIndex).join("\n");
+    } else {
+      cleaned = cleaned.slice(0, unclosedThinkIndex);
+    }
+  }
+
+  return cleaned;
+}
+
+function parseRankingLine(line: string): RankResult | null {
+  const cleanedLine = line
+    .replace(/^[-*]\s*/, "")
+    .replace(/^文章ID[:：]?\s*/i, "")
+    .replace(/\s*分数[:：]\s*/i, " ")
+    .trim();
+
+  const match = cleanedLine.match(/^(\S+?)(?:[\s:：]+)(\d+(?:\.\d+)?)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, id, scoreStr] = match;
+  const score = parseFloat(scoreStr);
+
+  if (isNaN(score)) {
+    return null;
+  }
+
+  return { id: id.replace(/[:：]$/, ""), score };
 }

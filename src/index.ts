@@ -1,10 +1,13 @@
 import { startCronJobs } from "@src/controllers/cron.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
+import {
+  initializeAppConfig,
+  validateAppConfig,
+} from "@src/utils/config/app-config.ts";
 import { Logger, LogLevel } from "@zilla/logger";
 import startServer from "@src/server.ts";
 async function bootstrap() {
-  const configManager = ConfigManager.getInstance();
-  await configManager.initDefaultConfigSources();
+  await initializeAppConfig();
+  await validateAppConfig({ requireLLM: true });
 
   Logger.level = LogLevel.INFO;
 

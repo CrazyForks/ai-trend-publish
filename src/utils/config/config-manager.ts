@@ -1,5 +1,4 @@
 import { IConfigSource } from "./interfaces/config-source.interface.ts";
-import { DbConfigSource } from "./sources/db-config.source.ts";
 import { EnvConfigSource } from "./sources/env-config.source.ts";
 import { Logger } from "@zilla/logger";
 
@@ -73,11 +72,13 @@ export class ConfigManager {
     return null;
   }
   public async initDefaultConfigSources(): Promise<void> {
+    this.clearSources();
     // 环境变量
     this.addSource(new EnvConfigSource());
     // Database
-    if (await this.get<boolean>("ENABLE_DB")) {
+    if (await this.getBoolean("ENABLE_DB", false)) {
       logger.info("DB enabled");
+      const { DbConfigSource } = await import("./sources/db-config.source.ts");
       this.addSource(new DbConfigSource());
     }
   }
@@ -104,6 +105,33 @@ export class ConfigManager {
     throw new ConfigurationError(
       `Configuration key "${key}" not found in any source after ${options.maxAttempts} attempts`,
     );
+  }
+
+  public async getOptional<T>(
+    key: string,
+    fallback?: T,
+    retryOptions?: Partial<RetryOptions>,
+  ): Promise<T | undefined> {
+    try {
+      return await this.get<T>(key, retryOptions);
+    } catch {
+      return fallback;
+    }
+  }
+
+  public async getBoolean(
+    key: string,
+    fallback = false,
+    retryOptions?: Partial<RetryOptions>,
+  ): Promise<boolean> {
+    const value = await this.getOptional<unknown>(key, fallback, retryOptions);
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+    }
+    return Boolean(value);
   }
 
   /**

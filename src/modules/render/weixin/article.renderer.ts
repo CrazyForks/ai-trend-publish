@@ -1,15 +1,26 @@
 import { WeixinTemplate } from "@src/modules/render/weixin/interfaces/article.type.ts";
 import ejs from "npm:ejs";
-import { WeixinImageProcessor } from "@src/utils/image/image-processor.ts";
-import { WeixinPublisher } from "@src/modules/publishers/weixin.publisher.ts";
 import { BaseTemplateRenderer } from "@src/modules/render/weixin/base.renderer.ts";
+import { WeixinDynamicHtmlGenerator } from "@src/modules/render/weixin/dynamic/dynamic-html.generator.ts";
+import { Logger } from "@zilla/logger";
+
+const DYNAMIC_TEMPLATE = "__dynamic__";
+const logger = new Logger("weixin-article-template-renderer");
+
+export interface DynamicHtmlGenerator {
+  generate(articles: WeixinTemplate[]): Promise<string>;
+}
 
 /**
  * 文章模板渲染器
  */
 export class WeixinArticleTemplateRenderer
   extends BaseTemplateRenderer<WeixinTemplate[]> {
-  constructor() {
+  constructor(
+    private dynamicHtmlGenerator: DynamicHtmlGenerator =
+      new WeixinDynamicHtmlGenerator(),
+    private uploadContentImages: boolean = true,
+  ) {
     super("article");
     this.availableTemplates = [
       "default",
@@ -20,7 +31,12 @@ export class WeixinArticleTemplateRenderer
       "product",
       "minimal",
       "darktech",
+      "dynamic",
     ];
+  }
+
+  public setUploadContentImages(enabled: boolean): void {
+    this.uploadContentImages = enabled;
   }
 
   /**
@@ -102,6 +118,7 @@ export class WeixinArticleTemplateRenderer
       darktech: await this.getTemplateContent(
         "/templates/article.darktech.ejs",
       ),
+      dynamic: DYNAMIC_TEMPLATE,
     };
   }
 
@@ -112,7 +129,6 @@ export class WeixinArticleTemplateRenderer
     data: WeixinTemplate[],
     template: string,
   ): Promise<string> {
-    const imageProcessor = new WeixinImageProcessor(new WeixinPublisher());
     // 预处理每篇文章 插入图片到段落之间
     console.log(
       `WeixinArticleTemplateRenderer doRender: ${data.length} articles`,
@@ -121,21 +137,61 @@ export class WeixinArticleTemplateRenderer
       this.processArticleContent(article)
     );
 
+    await this.processArticleImages(processedData);
+
+    if (template === DYNAMIC_TEMPLATE) {
+      try {
+        return await this.dynamicHtmlGenerator.generate(processedData);
+      } catch (error) {
+        logger.warn(
+          `动态微信模板生成失败，回退 minimal: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return this.renderStaticTemplate(processedData, this.templates.minimal);
+      }
+    }
+
+    return this.renderStaticTemplate(processedData, template);
+  }
+
+  private renderStaticTemplate(
+    articles: WeixinTemplate[],
+    template: string,
+  ): string {
+    return ejs.render(
+      template,
+      {
+        articles,
+      },
+      { rmWhitespace: true },
+    );
+  }
+
+  private async processArticleImages(
+    articles: WeixinTemplate[],
+  ): Promise<void> {
+    if (!articles.some((article) => /<img\b/i.test(article.content))) {
+      return;
+    }
+    if (!this.uploadContentImages) {
+      logger.info("[DryRun] 跳过微信正文图片上传");
+      return;
+    }
+
+    const [{ WeixinImageProcessor }, { WeixinPublisher }] = await Promise.all([
+      import("@src/utils/image/image-processor.ts"),
+      import("@src/modules/publishers/weixin.publisher.ts"),
+    ]);
+    const imageProcessor = new WeixinImageProcessor(new WeixinPublisher());
+
     // 将图片上传到微信 并替换图片url
-    for (const article of processedData) {
+    for (const article of articles) {
       const { content, results } = await imageProcessor.processContent(
         article.content,
       );
       article.content = content;
       console.log(results);
     }
-
-    return ejs.render(
-      template,
-      {
-        articles: processedData,
-      },
-      { rmWhitespace: true },
-    );
   }
 }

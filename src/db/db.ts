@@ -12,7 +12,6 @@ const logger = new Logger("DB");
 logger.info("DB_HOST", process.env.DB_HOST);
 logger.info("DB_PORT", process.env.DB_PORT);
 logger.info("DB_USER", process.env.DB_USER);
-logger.info("DB_PASSWORD", process.env.DB_PASSWORD);
 logger.info("DB_DATABASE", process.env.DB_DATABASE);
 
 const poolConnection = mysql.createPool({
@@ -33,8 +32,12 @@ const db = drizzle(poolConnection, {
   schema: {
     config: config,
     dataSources: dataSources,
-    vectorItems
+    vectorItems,
   },
 });
 
 export default db;
+
+export async function closeDatabase(): Promise<void> {
+  await poolConnection.end();
+}

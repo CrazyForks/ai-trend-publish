@@ -14,8 +14,11 @@
 ### 启动时报配置错误
 
 1. 确认仓库根目录存在 `.env`。
-2. 对照 `.env.example` 补齐基础配置（尤其是 `SERVER_API_KEY`、公众号与模型配置）。
-3. 如果是数据库相关错误，先将 `ENABLE_DB=false` 试跑，确认核心流程可用后再接入数据库。
+2. 运行 `deno task doctor` 查看缺失项。
+3. 对照 `.env.example` 补齐基础配置（尤其是
+   `SERVER_API_KEY`、公众号与模型配置）。
+4. 如果是数据库相关错误，先将 `ENABLE_DB=false`
+   试跑，确认核心流程可用后再接入数据库。
 
 ### JSON-RPC 请求返回 401
 
@@ -45,13 +48,24 @@
 
 1. 给 `JINA_API_KEY` 与 `FIRE_CRAWL_API_KEY` 配置可用 key。
 2. 调整数据源质量，避免低质量站点。
-3. 根据场景调优 `AI_CONTENT_RANKER_LLM_PROVIDER` 与 `AI_SUMMARIZER_LLM_PROVIDER`。
+3. 使用更适合长文本分析的 `LLM_MODEL`。
 
 ### 微信发布失败
 
 1. 检查 `WEIXIN_APP_ID` 与 `WEIXIN_APP_SECRET`。
 2. 检查公众号后台 IP 白名单。
 3. 检查模板中是否有超长内容或不合法 HTML。
+4. 先执行 `deno task article:dry`，确认抓取、摘要和模板渲染无误后再正式发布。
+
+### 想只看模板效果
+
+运行：
+
+```bash
+deno task preview
+```
+
+生成的 HTML 位于 `src/temp/preview_weixin_*.html`。
 
 ## 排查建议
 

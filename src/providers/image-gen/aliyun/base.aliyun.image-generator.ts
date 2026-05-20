@@ -143,7 +143,7 @@ export abstract class BaseAliyunImageGenerator extends BaseImageGenerator {
       }
 
       if (status.task_status === "FAILED") {
-        throw new Error("图片生成任务失败");
+        throw new Error(`图片生成任务失败: ${JSON.stringify(status)}`);
       }
 
       await new Promise((resolve) => setTimeout(resolve, interval));

@@ -2,7 +2,6 @@ import { ConfigManager } from "@src/utils/config/config-manager.ts";
 import {
   LLMProvider,
   LLMProviderType,
-  LLMProviderTypeMap,
 } from "@src/providers/interfaces/llm.interface.ts";
 import { OpenAICompatibleLLM } from "@src/providers/llm/openai-compatible-llm.ts";
 import { XunfeiLLM } from "@src/providers/llm/xunfei-llm.ts";
@@ -12,9 +11,10 @@ import { XunfeiLLM } from "@src/providers/llm/xunfei-llm.ts";
  * 支持两种格式:
  * 1. 简单格式: "PROVIDER" - 仅指定提供者类型
  * 2. 扩展格式: "PROVIDER:model" - 指定提供者类型和模型
+ * 3. 留空或 "LLM" - 使用统一 LLM_* 配置
  */
 interface ParsedLLMConfig {
-  providerType: LLMProviderType;
+  providerType: LLMProviderType | "LLM";
   model?: string;
 }
 
@@ -46,8 +46,12 @@ export class LLMFactory {
    * @returns 解析后的配置对象
    */
   private parseLLMConfig(config: string): ParsedLLMConfig {
+    if (!config || config === "LLM") {
+      return { providerType: "LLM" };
+    }
+
     const parts = config.split(":");
-    const providerType = parts[0] as LLMProviderType;
+    const providerType = parts[0] as LLMProviderType | "LLM";
     const model = parts.length > 1 ? parts[1] : undefined;
 
     return { providerType, model };
@@ -71,35 +75,36 @@ export class LLMFactory {
    * @param needRefresh 是否需要刷新提供者配置
    * @returns LLM提供者实例
    */
-  public async getLLMProvider<T extends ParsedLLMConfig>(
-    typeOrConfig: T | string,
+  public async getLLMProvider(
+    typeOrConfig: ParsedLLMConfig | string,
     needRefresh: boolean = true,
-  ): Promise<LLMProviderTypeMap[T["providerType"]]> {
+  ): Promise<LLMProvider> {
     // 解析配置
     const config = typeof typeOrConfig === "string"
       ? this.parseLLMConfig(typeOrConfig)
       : typeOrConfig;
-
-    type ProviderType = LLMProviderTypeMap[T["providerType"]];
 
     // 获取缓存键
     const cacheKey = this.getProviderCacheKey(config);
 
     // 如果已经创建过该类型的提供者，且不需要刷新，直接返回
     if (this.providers.has(cacheKey) && !needRefresh) {
-      return this.providers.get(cacheKey)! as ProviderType;
+      return this.providers.get(cacheKey)!;
     }
 
     // 如果需要刷新且提供者存在，先刷新配置
     if (needRefresh && this.providers.has(cacheKey)) {
       await this.providers.get(cacheKey)!.refresh();
-      return this.providers.get(cacheKey)! as ProviderType;
+      return this.providers.get(cacheKey)!;
     }
 
     // 根据类型创建对应的LLM提供者
     let provider: LLMProvider;
 
     switch (config.providerType) {
+      case "LLM":
+        provider = new OpenAICompatibleLLM("LLM_", undefined, config.model);
+        break;
       case "OPENAI":
         provider = new OpenAICompatibleLLM("OPENAI_", undefined, config.model);
         break;
@@ -137,7 +142,7 @@ export class LLMFactory {
     try {
       await provider.initialize();
       this.providers.set(cacheKey, provider);
-      return provider as ProviderType;
+      return provider;
     } catch (error) {
       console.error(`初始化LLM提供者失败 [${cacheKey}]:`, error);
       throw new Error(
@@ -165,16 +170,47 @@ export class LLMFactory {
 
   /**
    * 获取默认的LLM提供者
-   * 从配置中读取DEFAULT_LLM_PROVIDER，如果未配置则默认使用OpenAI
+   * 优先使用统一 LLM_* 配置，兼容旧的 DEFAULT_LLM_PROVIDER。
    */
   public async getDefaultProvider(): Promise<LLMProvider> {
     try {
-      const defaultProviderConfig =
-        await this.configManager.get("DEFAULT_LLM_PROVIDER") || "OPENAI";
+      const defaultProviderConfig = await this.getDefaultProviderConfig();
       return this.getLLMProvider(defaultProviderConfig as string);
     } catch (error) {
-      console.error("获取默认LLM提供者失败，尝试使用OpenAI作为备选:", error);
-      return this.getLLMProvider("OPENAI");
+      console.error("获取默认LLM提供者失败，尝试使用统一 LLM 配置:", error);
+      return this.getLLMProvider("LLM");
+    }
+  }
+
+  private async getDefaultProviderConfig(): Promise<string> {
+    if (await this.hasUnifiedLLMConfig()) {
+      return "LLM";
+    }
+
+    const llmProvider = await this.getOptionalConfig("LLM_PROVIDER");
+    if (llmProvider) {
+      return llmProvider;
+    }
+
+    const defaultProvider = await this.getOptionalConfig(
+      "DEFAULT_LLM_PROVIDER",
+    );
+    return defaultProvider || "LLM";
+  }
+
+  private async hasUnifiedLLMConfig(): Promise<boolean> {
+    const baseURL = await this.getOptionalConfig("LLM_BASE_URL");
+    const apiKey = await this.getOptionalConfig("LLM_API_KEY");
+    const model = await this.getOptionalConfig("LLM_MODEL");
+    return Boolean(baseURL || apiKey || model);
+  }
+
+  private async getOptionalConfig(key: string): Promise<string | undefined> {
+    try {
+      const value = await this.configManager.get<string>(key);
+      return value || undefined;
+    } catch {
+      return undefined;
     }
   }
 }

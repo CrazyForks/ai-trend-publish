@@ -9,28 +9,18 @@ import {
   getTitleUserPrompt,
 } from "@src/prompts/summarizer.prompt.ts";
 import { LLMFactory } from "@src/providers/llm/llm-factory.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";
-
-enum SummarizarSetting {
-  AI_SUMMARIZER_LLM_PROVIDER = "AI_SUMMARIZER_LLM_PROVIDER",
-}
+import { cleanLLMJsonText, cleanLLMText } from "@src/utils/llm-output.ts";
 
 const logger = new Logger("ai-summarizer");
 
 export class AISummarizer implements ContentSummarizer {
   private llmFactory: LLMFactory;
-  private configInstance: ConfigManager;
 
   constructor() {
     this.llmFactory = LLMFactory.getInstance();
-    this.configInstance = ConfigManager.getInstance();
-    this.configInstance.get(SummarizarSetting.AI_SUMMARIZER_LLM_PROVIDER).then(
-      (provider) => {
-        logger.info(`Summarizer当前使用的LLM模型: ${provider}`);
-      },
-    );
+    logger.info("Summarizer使用统一LLM配置");
   }
 
   async summarize(
@@ -42,11 +32,7 @@ export class AISummarizer implements ContentSummarizer {
     }
 
     return RetryUtil.retryOperation(async () => {
-      const llm = await this.llmFactory.getLLMProvider(
-        await this.configInstance.get(
-          SummarizarSetting.AI_SUMMARIZER_LLM_PROVIDER,
-        ),
-      );
+      const llm = await this.llmFactory.getDefaultProvider();
       const response = await llm.createChatCompletion([
         {
           role: "system",
@@ -72,7 +58,7 @@ export class AISummarizer implements ContentSummarizer {
       }
 
       try {
-        const summary = JSON.parse(completion) as Summary;
+        const summary = JSON.parse(cleanLLMJsonText(completion)) as Summary;
         if (
           !summary.title ||
           !summary.content
@@ -95,11 +81,7 @@ export class AISummarizer implements ContentSummarizer {
     options?: Record<string, any>,
   ): Promise<string> {
     return RetryUtil.retryOperation(async () => {
-      const llm = await this.llmFactory.getLLMProvider(
-        await this.configInstance.get(
-          SummarizarSetting.AI_SUMMARIZER_LLM_PROVIDER,
-        ),
-      );
+      const llm = await this.llmFactory.getDefaultProvider();
       const response = await llm.createChatCompletion([
         {
           role: "system",
@@ -121,7 +103,11 @@ export class AISummarizer implements ContentSummarizer {
       if (!title) {
         throw new Error("未获取到有效的标题");
       }
-      return title;
+      const cleanedTitle = cleanLLMText(title);
+      if (!cleanedTitle) {
+        throw new Error("标题生成结果为空");
+      }
+      return cleanedTitle;
     });
   }
 }

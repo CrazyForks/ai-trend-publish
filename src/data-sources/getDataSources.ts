@@ -1,6 +1,4 @@
 import { ConfigManager } from "@src/utils/config/config-manager.ts";
-import db from "@src/db/db.ts";
-import { dataSources } from "@src/db/schema.ts";
 import { Logger } from "@zilla/logger";
 export type NewsPlatform = "firecrawl" | "twitter";
 
@@ -37,6 +35,10 @@ export const getDataSources = async (): Promise<SourceConfig> => {
 
     if (dbEnabled) {
       logger.info("开始从数据库获取数据源");
+      const [{ default: db }, { dataSources }] = await Promise.all([
+        import("@src/db/db.ts"),
+        import("@src/db/schema.ts"),
+      ]);
       const dbResults = await db.select({
         identifier: dataSources.identifier,
         platform: dataSources.platform,

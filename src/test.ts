@@ -1,8 +1,10 @@
 // deno-lint-ignore-file no-unused-vars
 import { WeixinArticleWorkflow } from "@src/services/weixin-article.workflow.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
-import { EnvConfigSource } from "@src/utils/config/sources/env-config.source.ts";
-import { DbConfigSource } from "@src/utils/config/sources/db-config.source.ts";
+import {
+  initializeAppConfig,
+  shutdownAppResources,
+  validateAppConfig,
+} from "@src/utils/config/app-config.ts";
 import { WeixinAIBenchWorkflow } from "@src/services/weixin-aibench.workflow.ts";
 import { WeixinHelloGithubWorkflow } from "@src/services/weixin-hellogithub.workflow.ts";
 import { Logger, LogLevel } from "@zilla/logger";
@@ -19,8 +21,8 @@ const test_workflows = [
 const selected_workflow = test_workflows[1];
 
 async function bootstrap() {
-  const configManager = ConfigManager.getInstance();
-  await configManager.initDefaultConfigSources();
+  await initializeAppConfig();
+  await validateAppConfig({ requireLLM: true });
 
   if (selected_workflow === WeixinAIBenchWorkflow) {
     const weixinWorkflow = new selected_workflow({
@@ -75,4 +77,11 @@ async function bootstrap() {
   }
 }
 
-bootstrap().catch(console.error);
+try {
+  await bootstrap();
+} catch (error) {
+  console.error(error);
+  Deno.exitCode = 1;
+} finally {
+  await shutdownAppResources();
+}

@@ -1,0 +1,75 @@
+import { assertRejects, assertStringIncludes } from "@std/assert";
+import { LLMProvider } from "@src/providers/interfaces/llm.interface.ts";
+import { WeixinDynamicHtmlGenerator } from "@src/modules/render/weixin/dynamic/dynamic-html.generator.ts";
+import { WeixinTemplate } from "@src/modules/render/weixin/interfaces/article.type.ts";
+
+const articles: WeixinTemplate[] = [{
+  id: "1",
+  title: "生成器测试",
+  content: "OpenAI发布新模型。",
+  url: "https://example.com",
+  publishDate: "2026-05-20",
+  metadata: {},
+  keywords: ["OpenAI"],
+}];
+
+function createGenerator(content: string): WeixinDynamicHtmlGenerator {
+  const llm: LLMProvider = {
+    initialize: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    setModel: () => {},
+    createChatCompletion: () =>
+      Promise.resolve({
+        choices: [{
+          message: {
+            content,
+          },
+        }],
+      }),
+  };
+
+  return new WeixinDynamicHtmlGenerator({
+    getLLMProvider: () => Promise.resolve(llm),
+    getDefaultProvider: () => Promise.resolve(llm),
+  });
+}
+
+Deno.test("WeixinDynamicHtmlGenerator returns processed html from valid JSON", async () => {
+  const generator = createGenerator(`
+<think>先确定排版方向。</think>
+${
+    JSON.stringify({
+      html:
+        '<section><div class="x"><p>OpenAI发布新模型</p><a href="https://example.com">来源</a></div></section>',
+      theme: "tech",
+      notes: "ok",
+    })
+  }
+`);
+
+  const html = await generator.generate(articles);
+
+  assertStringIncludes(html, "OpenAI 发布新模型");
+  assertStringIncludes(html, "参考链接");
+  assertStringIncludes(html, "<section");
+});
+
+Deno.test("WeixinDynamicHtmlGenerator rejects invalid JSON", async () => {
+  const generator = createGenerator("not json");
+
+  await assertRejects(
+    () => generator.generate(articles),
+    Error,
+    "解析动态 HTML JSON 失败",
+  );
+});
+
+Deno.test("WeixinDynamicHtmlGenerator rejects empty html", async () => {
+  const generator = createGenerator(JSON.stringify({ html: "" }));
+
+  await assertRejects(
+    () => generator.generate(articles),
+    Error,
+    "缺少 html 字段",
+  );
+});
