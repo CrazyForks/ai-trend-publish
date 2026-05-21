@@ -1,6 +1,5 @@
 import axios from "npm:axios";
-import { LLMFactory } from "@src/providers/llm/llm-factory.ts";
-import { LLMProvider } from "@src/providers/interfaces/llm.interface.ts";
+import { LLMProvider } from "@src/core/ports/llm.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";
 
@@ -35,17 +34,14 @@ interface ModelScores {
 export class LiveBenchAPI {
   private static readonly BASE_URL = "https://livebench.ai";
   private categoryMapping: CategoryMapping = {};
-  private llmProvider!: LLMProvider;
+  private llmProvider: LLMProvider;
 
-  constructor() {
-    // 使用LLMFactory创建QWEN提供者
-    this.refresh();
+  constructor(llmProvider: LLMProvider) {
+    this.llmProvider = llmProvider;
   }
 
   async refresh() {
     try {
-      const llmFactory = LLMFactory.getInstance();
-      this.llmProvider = await llmFactory.getLLMProvider("QWEN");
       await this.llmProvider.refresh();
     } catch (error) {
       console.error("刷新LLM提供者失败:", error);

@@ -1,5 +1,5 @@
 import { Logger } from "@zilla/logger";
-import { WorkflowTerminateError } from "@src/works/workflow-error.ts";
+import { WorkflowTerminateError } from "@src/core/workflow/workflow-error.ts";
 
 const logger = new Logger("retry-util");
 

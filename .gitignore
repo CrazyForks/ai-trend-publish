@@ -42,11 +42,13 @@ Thumbs.db
 
 # Environment variables
 .env
+trendpublish.config.ts
 .env.local
 .env.*.local
 
 # Temp files
 temp/
+src/temp/
 tmp/
 *.tmp
 *.bak

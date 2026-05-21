@@ -1,4 +1,6 @@
-import { getWorkflow, WorkflowType } from "@src/controllers/cron.ts";
+import { WorkflowType } from "@src/controllers/cron.ts";
+import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
+import { createWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/workflow.definition.ts";
 import {
   initializeAppConfig,
   shutdownAppResources,
@@ -6,7 +8,6 @@ import {
 } from "@src/utils/config/app-config.ts";
 
 interface CliOptions {
-  workflowType: WorkflowType;
   dryRun: boolean;
   maxArticles?: number;
   sourceType?: "all" | "firecrawl" | "twitter";
@@ -16,7 +17,6 @@ interface CliOptions {
 
 function parseArgs(args: string[]): CliOptions {
   const options: CliOptions = {
-    workflowType: WorkflowType.WeixinArticle,
     dryRun: false,
   };
 
@@ -26,14 +26,11 @@ function parseArgs(args: string[]): CliOptions {
 
     switch (arg) {
       case "--workflow":
-        if (
-          !next || !Object.values(WorkflowType).includes(next as WorkflowType)
-        ) {
+        if (!next || next !== WorkflowType.WeixinArticle) {
           throw new Error(
-            `--workflow 必须是: ${Object.values(WorkflowType).join(", ")}`,
+            `--workflow 仅支持: ${WorkflowType.WeixinArticle}`,
           );
         }
-        options.workflowType = next as WorkflowType;
         index++;
         break;
       case "--dry-run":
@@ -86,7 +83,7 @@ function printHelp() {
   deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow --dry-run --max-articles 5
 
 参数:
-  --workflow <type>       工作流类型，默认 weixin-article-workflow
+  --workflow <type>       兼容旧命令，仅支持 weixin-article-workflow
   --dry-run              跑完整流程但不上传封面/正文图，也不发布
   --dry-run-output <dir> dry-run HTML 输出目录
   --max-articles <n>     限制文章数量
@@ -103,8 +100,8 @@ try {
     requireWeixinPublish: !options.dryRun,
   });
 
-  const workflow = getWorkflow(options.workflowType);
-  await workflow.execute({
+  const runtime = new LocalWorkflowRuntime();
+  await runtime.run(createWeixinArticleWorkflowDefinition(), {
     payload: {
       dryRun: options.dryRun,
       dryRunOutputDir: options.dryRunOutputDir,

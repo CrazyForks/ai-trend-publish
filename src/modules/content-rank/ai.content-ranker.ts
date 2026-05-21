@@ -1,22 +1,22 @@
 import { RetryUtil } from "@src/utils/retry.util.ts";
-import { ScrapedContent } from "@src/modules/interfaces/scraper.interface.ts";
-import { LLMFactory } from "@src/providers/llm/llm-factory.ts";
-import { ChatMessage } from "@src/providers/interfaces/llm.interface.ts";
+import { ScrapedContent } from "@src/core/ports/content-scraper.ts";
+import { ChatMessage, LLMProvider } from "@src/core/ports/llm.ts";
 import {
   getSystemPrompt,
   getUserPrompt,
 } from "@src/prompts/content-ranker.prompt.ts";
-import { RankResult } from "@src/modules/interfaces/content-ranker.interface.ts";
+import { RankResult } from "@src/core/ports/content-ranker.ts";
 import { Logger } from "@zilla/logger";
 import { stripMarkdownFence } from "@src/utils/llm-output.ts";
+import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 
 const logger = new Logger("ai-content-ranker");
 
 export class ContentRanker {
-  private llmFactory: LLMFactory;
-
-  constructor() {
-    this.llmFactory = LLMFactory.getInstance();
+  constructor(
+    private readonly llmProvider: LLMProvider,
+    private readonly promptProfile?: PromptProfileName,
+  ) {
     logger.info("Ranker使用统一LLM配置");
   }
 
@@ -27,13 +27,15 @@ export class ContentRanker {
 
     return RetryUtil.retryOperation(
       async () => {
-        const llmProvider = await this.llmFactory.getDefaultProvider();
         const messages: ChatMessage[] = [
-          { role: "system", content: getSystemPrompt() },
-          { role: "user", content: getUserPrompt(contents) },
+          { role: "system", content: getSystemPrompt(this.promptProfile) },
+          {
+            role: "user",
+            content: getUserPrompt(contents, this.promptProfile),
+          },
         ];
 
-        const response = await llmProvider.createChatCompletion(messages);
+        const response = await this.llmProvider.createChatCompletion(messages);
 
         const result = response.choices?.[0]?.message?.content;
         if (!result) {

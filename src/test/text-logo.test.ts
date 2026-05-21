@@ -1,4 +1,4 @@
-import { TextLogoGenerator } from "../providers/image-gen/text-logo";
+import { TextLogoGenerator } from "@src/integrations/image/providers/text-logo-generator.ts";
 import path from "path";
 
 async function testTextLogo() {

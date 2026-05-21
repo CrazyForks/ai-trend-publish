@@ -1,4 +1,3 @@
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("http-client");
@@ -39,11 +38,8 @@ interface RequestOptions extends RequestInit {
 
 export class HttpClient {
   private static instance: HttpClient;
-  private configManager: ConfigManager;
 
-  private constructor() {
-    this.configManager = ConfigManager.getInstance();
-  }
+  private constructor() {}
 
   public static getInstance(): HttpClient {
     if (!HttpClient.instance) {

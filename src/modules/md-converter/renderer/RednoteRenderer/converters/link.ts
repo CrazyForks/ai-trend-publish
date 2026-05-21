@@ -8,7 +8,7 @@ import { makeStyleText } from "@src/modules/md-converter/utils/index.ts";
 
 export const linkConverter: ConverterFunc<MarkdownElement.Link> = (
   styles: Theme,
-  options: LinkConverterOptions,
+  _options: LinkConverterOptions,
   href: string,
   title: string,
   text: string,

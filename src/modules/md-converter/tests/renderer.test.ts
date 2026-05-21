@@ -8,7 +8,7 @@ Deno.test("微信完整渲染测试", () => {
   const assemble = renderer.assemble();
   marked.use({ renderer: assemble });
   const content = Deno.readTextFileSync(
-    "./src/modules/render/md-converter/tests/test.md",
+    "./src/modules/md-converter/tests/test.md",
   );
 
   const result = marked(content);
@@ -20,7 +20,7 @@ Deno.test("Rednote完整渲染测试", () => {
   const assemble = renderer.assemble();
   marked.use({ renderer: assemble });
   const content = Deno.readTextFileSync(
-    "./src/modules/render/md-converter/tests/test.md",
+    "./src/modules/md-converter/tests/test.md",
   );
   const result = marked(content);
   console.log(result);

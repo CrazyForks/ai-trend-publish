@@ -13,46 +13,40 @@
 
 ### 启动时报配置错误
 
-1. 确认仓库根目录存在 `.env`。
+1. 确认仓库根目录存在 `trendpublish.config.ts`。
 2. 运行 `deno task doctor` 查看缺失项。
-3. 对照 `.env.example` 补齐基础配置（尤其是
-   `SERVER_API_KEY`、公众号与模型配置）。
-4. 如果是数据库相关错误，先将 `ENABLE_DB=false`
+3. 对照 `trendpublish.config.example.ts` 补齐基础配置（尤其是
+   `server.apiKey`、`providers.publish.weixin` 与 `providers.ai` 配置）。
+4. 如果是数据库相关错误，先将 `storage.mysql.enabled=false`
    试跑，确认核心流程可用后再接入数据库。
 
 ### JSON-RPC 请求返回 401
 
-1. 请求头必须是 `Authorization: Bearer <SERVER_API_KEY>`。
-2. 确认 `.env` 中 `SERVER_API_KEY` 与请求值一致。
+1. 请求头必须是 `Authorization: Bearer <server.apiKey>`。
+2. 确认 `trendpublish.config.ts` 中 `server.apiKey` 与请求值一致。
 
 ### JSON-RPC 请求返回 404
 
 1. 路径必须是 `POST /api/workflow`。
 2. 不要遗漏 `/api` 前缀。
 
-### 调用 triggerWorkflow 返回“无效的工作流类型”
-
-当前仅支持：
-
-- `weixin-article-workflow`
-- `weixin-aibench-workflow`
-- `weixin-hellogithub-workflow`
-
 ### 定时任务没有执行
 
 1. 程序内置 cron 表达式为每天 `03:00`（时区 `Asia/Shanghai`）。
-2. 每天执行的工作流由 `1_of_week_workflow` 到 `7_of_week_workflow` 控制。
+2. 定时任务固定执行微信文章发布工作流。
 3. 确认进程常驻（例如使用 `pm2` 托管）。
 
 ### 抓取结果质量不稳定
 
-1. 给 `JINA_API_KEY` 与 `FIRE_CRAWL_API_KEY` 配置可用 key。
+1. 给 `providers.fetch.jina.apiKey` 与 `providers.fetch.firecrawl.apiKey`
+   配置可用 key。
 2. 调整数据源质量，避免低质量站点。
-3. 使用更适合长文本分析的 `LLM_MODEL`。
+3. 使用更适合长文本分析的 `providers.ai.model`。
 
 ### 微信发布失败
 
-1. 检查 `WEIXIN_APP_ID` 与 `WEIXIN_APP_SECRET`。
+1. 检查 `providers.publish.weixin.appId` 与
+   `providers.publish.weixin.appSecret`。
 2. 检查公众号后台 IP 白名单。
 3. 检查模板中是否有超长内容或不合法 HTML。
 4. 先执行 `deno task article:dry`，确认抓取、摘要和模板渲染无误后再正式发布。

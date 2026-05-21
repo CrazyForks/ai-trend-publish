@@ -11,7 +11,7 @@ async function bootstrap() {
 
   Logger.level = LogLevel.INFO;
 
-  startCronJobs();
+  await startCronJobs();
   startServer();
 }
 

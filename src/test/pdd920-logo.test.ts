@@ -1,5 +1,6 @@
-import { ImageGeneratorFactory } from "@src/providers/image-gen/image-generator-factory.ts";
-import { PDD920LogoGenerator } from "@src/providers/image-gen/pdd920-logo.ts";
+import { ImageGeneratorResolver } from "@src/integrations/image/image-generator-resolver.ts";
+import { ImageGeneratorType } from "@src/core/ports/image-generator.ts";
+import { PDD920LogoGenerator } from "@src/integrations/image/providers/pdd920-logo-generator.ts";
 import path from "path";
 
 async function testPDD920Logo() {
@@ -14,8 +15,8 @@ async function testPDD920Logo() {
     );
 
     // 测试获取JSON URL
-    const imageUrl = await ImageGeneratorFactory.getInstance().getGenerator(
-      "PDD920_LOGO",
+    const imageUrl = await new ImageGeneratorResolver().getGenerator(
+      ImageGeneratorType.PDD920_LOGO,
     );
 
     console.log("图片URL:", imageUrl);

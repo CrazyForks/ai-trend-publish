@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { postProcessDynamicHtml } from "@src/modules/render/weixin/dynamic/html-post-processor.ts";
-import { WeixinTemplate } from "@src/modules/render/weixin/interfaces/article.type.ts";
+import { postProcessDynamicHtml } from "@src/features/weixin-article/rendering/dynamic/html-post-processor.ts";
+import { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
 import { formatDate } from "@src/utils/common.ts";
 import ejs from "npm:ejs";
 
@@ -96,7 +96,7 @@ async function renderEjsPreview(
 ): Promise<string> {
   const templatePath = join(
     Deno.cwd(),
-    "src/modules/render/weixin/templates",
+    "src/features/weixin-article/rendering/templates",
     fileName,
   );
   const template = await Deno.readTextFile(templatePath);

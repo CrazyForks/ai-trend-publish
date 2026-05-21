@@ -25,7 +25,7 @@ export const linkConverter: ConverterFunc<MarkdownElement.Link> = (
   }
   const { enableFootNote, addFootNote } = options;
   if (enableFootNote && addFootNote) {
-    let index = addFootNote(title || text, href);
+    const index = addFootNote(title || text, href);
     return `<span style="${
       makeStyleText(
         styles.link,

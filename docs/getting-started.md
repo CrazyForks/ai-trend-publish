@@ -15,25 +15,45 @@ cd ai-trend-publish
 ## 3. 初始化配置
 
 ```bash
-cp .env.example .env
+cp trendpublish.config.example.ts trendpublish.config.ts
 ```
 
-至少先完成以下变量：
+至少先完成以下字段：
 
-- `SERVER_API_KEY`
-- `LLM_BASE_URL`
-- `LLM_API_KEY`
-- `LLM_MODEL`
+- `server.apiKey`
+- `providers.ai.baseUrl`
+- `providers.ai.apiKey`
+- `providers.ai.model`
 
 正式发布公众号时再配置：
 
-- `WEIXIN_APP_ID`
-- `WEIXIN_APP_SECRET`
+- `providers.publish.weixin.appId`
+- `providers.publish.weixin.appSecret`
 
 跑微信文章工作流时，至少配置一种抓取源：
 
-- `FIRE_CRAWL_API_KEY`
-- `X_API_BEARER_TOKEN` 或 `XQUIK_API_KEY`
+- `features.article.sources`
+- URL 对应的 `providers.fetch.*`
+
+最简单的数据源写法是 URL 列表：
+
+```ts
+features: {
+  article: {
+    renderer: {
+      promptProfile: "technology",
+    },
+    sources: [
+      "https://news.ycombinator.com/",
+      "social:https://x.com/OpenAIDevs",
+    ],
+  },
+},
+fetchGroups: {
+  default: ["auto"],
+  social: ["twitter"],
+},
+```
 
 更多功能开关和必填项见 [配置说明](/configuration)。
 

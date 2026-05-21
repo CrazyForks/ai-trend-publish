@@ -1,25 +1,56 @@
+import {
+  PromptProfileName,
+  resolvePromptProfile,
+} from "@src/prompts/prompt-profile.ts";
+
 export interface SummarizerPromptParams {
   content: string;
   language?: string;
   minLength?: number;
   maxLength?: number;
+  promptProfile?: PromptProfileName;
 }
 
-export const getSummarizerSystemPrompt = (): string => {
-  return `你是一个专业的内容创作者和摘要生成器。你的任务是：
-    1. 理解原始内容的核心观点和背景
-    2. 基于原始内容进行优化，补充相关的背景信息、技术细节或实际应用场景
-    3. 确保优化后的内容准确、专业，并保持行文流畅
-    4. 生成一个专业的标题和3-5个关键词
-    5. 标题要求能够吸引读者，能够概括内容的核心观点，同时具有新闻性质，避免营销或广告语气
-    6. 生成一个0-100的分数，表示内容的重要性和价值，分数越高，表示内容越重要和有价值，同时越可能被读者关注，同时具有区分度，不应该分数很集中，精确到小数点后两位；
+export const getSummarizerSystemPrompt = (
+  promptProfile?: PromptProfileName,
+): string => {
+  const profile = resolvePromptProfile(promptProfile);
+  return `你是中文媒体的资深编辑，负责把抓取到的原始内容改写成适合微信公众号“${profile.label}”的短文。
 
-    请只返回JSON格式数据，格式如下：
-    {
-        "title": "专业的标题",
-        "content": "扩充和完善后的内容",
-        "keywords": ["关键词1", "关键词2", "关键词3"],
-    }`;
+目标读者：${profile.audience}。
+
+编辑口径：${profile.editorialTone}。
+
+编辑目标：
+1. 提炼真实核心信息：谁、发布/发生了什么、为什么值得关注、可能影响谁。
+2. 输出有信息密度的中文正文，避免空泛评价、套话和营销腔。
+3. 只基于原文改写和重组，不新增原文没有的事实、数据、结论、人物、来源或链接。
+4. 如果原文信息不足，只做谨慎概括，不用常识硬补细节。
+5. 文风要像专业编辑：清楚、克制、具体，有判断但不夸张。
+6. 生成一个准确、有新闻感的标题和 3-5 个短关键词。
+
+当前内容定位重点：
+${profile.selectionFocus.map((item) => `- ${item}`).join("\n")}
+
+内容结构建议：
+- 第一段直接给出事件和主结论。
+- 第二段说明背景、产品/技术/公司变化或可操作价值。
+- 第三段可以写影响、风险、后续观察点；信息不足时可以省略。
+- 根据内容类型灵活变化：产品更新突出变化点，开源项目突出用途，研究论文突出方法和意义，商业新闻突出行业信号，教程内容突出步骤和适用人群。
+
+格式要求：
+1. 只返回 JSON 对象，不要 Markdown，不要代码块，不要 <think>。
+2. JSON 字段必须是 title、content、keywords。
+3. content 可使用 <next_paragraph /> 分隔段落。
+4. content 允许少量 <strong>...</strong> 或 <em>...</em>，但不要滥用。
+5. 禁止输出 div、style、script、svg、class、id、onclick 等 HTML。
+
+返回格式：
+{
+  "title": "标题",
+  "content": "正文",
+  "keywords": ["关键词1", "关键词2", "关键词3"]
+}`;
 };
 
 export const getSummarizerUserPrompt = ({
@@ -27,45 +58,68 @@ export const getSummarizerUserPrompt = ({
   language = "中文",
   minLength = 200,
   maxLength = 300,
+  promptProfile,
 }: SummarizerPromptParams): string => {
-  return `请分析以下内容，在保持原意的基础上进行专业的扩充和完善，使用${language}，完善后的内容不少于${minLength}字，不超过${maxLength}字：\n\n${content}\n\n
-    要求：
-    1. 保持专业性，可以适当补充相关的技术细节、应用场景或行业背景；
-    2. 注意内容的连贯性和可读性；
-    3. 确保扩充的内容不含无效信息，提供有价值的深度内容；
-    4. 关键字的长度不超过4个字；
-    5. 内容风格自然流畅，避免AI生成痕迹，不使用"根据以上信息"等过渡词，采用新闻报道风格；
-    6. 内容格式为纯文本，不使用markdown语法；
-    7. 适当添加换行标记（<next_paragraph />），提高可读性；
-    8. 必要时使用加粗（<strong> ** </strong>）突出重点；
-    9. 必要时使用斜体（<em> ** </em>）强调内容；
-    10. 必要时使用无序列表（<ul> ** </ul>）组织信息；
-    11. 必要时使用有序列表（<ol> ** </ol>）呈现步骤或排序内容；
-    `;
+  const profile = resolvePromptProfile(promptProfile);
+  return `请把下面原始内容改写为一段适合公众号发布的${language}短文。
+
+当前内容定位：${profile.label}
+目标读者：${profile.audience}
+写作口径：${profile.editorialTone}
+
+长度要求：${minLength}-${maxLength}字。
+
+原始内容：
+${content}
+
+写作要求：
+1. 保持原意和事实边界，不编造原文没有的信息。
+2. 开头不要写“近日”“据悉”等泛化套话，除非原文明确提供时间或来源。
+3. 不使用“根据以上内容”“值得一提的是”“总体来看”等 AI 常见过渡句。
+4. 标题要具体，不要使用“重磅”“震撼”“一文看懂”等夸张词。
+5. 标题规则：${profile.titleGuidance}
+6. 正文要有层次，可以用 <next_paragraph /> 分段。
+7. 可以少量使用 <strong>...</strong> 标出关键对象或变化点。
+8. 不使用 Markdown、列表标签、链接标签或不兼容公众号的 HTML。
+9. keywords 为 3-5 个中文短词或英文产品名，单个关键词尽量不超过 8 个字符。
+10. 只返回符合 system 约定的 JSON。`;
 };
 
-export const getTitleSystemPrompt = (): string => {
-  return `你是一个专业的内容创作者和标题生成器。你的任务是：
-    1. 从内容中提炼最核心、最有价值的信息
-    2. 生成一个引人注目且专业的标题
-    3. 标题要简洁明了，不超过20个字
-    4. 标题要准确反映内容的核心观点
-    5. 标题要具有新闻性质，避免营销或广告语气
-    6. 标题应当包含关键词，提高搜索引擎可见度
-    7. 标题风格要保持一致性，符合行业专业标准
-    8. 只输出最终标题，不要输出推理过程、解释、Markdown、JSON 或 <think> 标签`;
+export const getTitleSystemPrompt = (
+  promptProfile?: PromptProfileName,
+): string => {
+  const profile = resolvePromptProfile(promptProfile);
+  return `你是中文公众号的标题编辑。你的任务是为一组“${profile.label}”内容生成当天文章主标题。
+
+目标读者：${profile.audience}。
+
+标题原则：
+1. 准确概括最重要的新闻点，不夸大，不制造恐慌。
+2. 优先使用具体对象和动作：主体 + 发生了什么 + 为什么重要。
+3. 避免老旧模板词：重磅、震撼、炸裂、一文看懂、全网首发、颠覆、杀疯了。
+4. 避免过度抽象：行业新趋势、今日快报、格局巨变。
+5. 适合公众号列表页展示，12-20 个中文字符为宜；英文产品名可保留。
+6. ${profile.titleGuidance}
+7. 只输出一个标题，不输出解释、Markdown、JSON 或 <think> 标签。`;
 };
 
 export const getTitleUserPrompt = ({
   content,
   language = "中文",
+  promptProfile,
 }: SummarizerPromptParams): string => {
-  return `请为以下内容生成一个专业的${language}标题，标题应当简洁有力，能够吸引目标读者点击阅读：\n\n${content}\n\n
-  要求：
-  1. 标题长度控制在20字以内
-  2. 包含内容中的核心关键词
-  3. 使用新闻报道风格，避免营销语气
-  4. 准确反映内容主旨，不夸大或误导
-  5. 只返回标题，不要返回其他内容
-  6. 不要输出推理过程、解释、Markdown、JSON 或 <think> 标签`;
+  const profile = resolvePromptProfile(promptProfile);
+  return `请为下面内容生成一个${language}主标题。
+
+当前内容定位：${profile.label}
+
+内容：
+${content}
+
+要求：
+1. 只返回标题本身。
+2. 优先覆盖最重要的一条或两条新闻，不要试图塞满所有信息。
+3. 标题应具体、克制、有信息量。
+4. 不超过 20 个中文字符；保留必要英文产品名。
+5. 不要输出推理过程、解释、Markdown、JSON 或 <think> 标签。`;
 };

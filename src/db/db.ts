@@ -2,42 +2,60 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { config, dataSources, vectorItems } from "@src/db/schema.ts";
 import { Logger } from "@zilla/logger";
-import process from "node:process";
-import dotenv from "npm:dotenv";
-
-dotenv.config();
+import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 
 const logger = new Logger("DB");
+const schema = {
+  config,
+  dataSources,
+  vectorItems,
+};
+const activePools = new Set<mysql.Pool>();
 
-logger.info("DB_HOST", process.env.DB_HOST);
-logger.info("DB_PORT", process.env.DB_PORT);
-logger.info("DB_USER", process.env.DB_USER);
-logger.info("DB_DATABASE", process.env.DB_DATABASE);
+export function createMysqlDatabase(
+  dbConfig: ResolvedTrendPublishConfig["storage"]["mysql"],
+) {
+  logger.info("DB_HOST", dbConfig.host);
+  logger.info("DB_PORT", dbConfig.port);
+  logger.info("DB_USER", dbConfig.user);
+  logger.info("DB_DATABASE", dbConfig.database);
 
-const poolConnection = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-});
+  const poolConnection = mysql.createPool({
+    host: dbConfig.host,
+    port: dbConfig.port,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database: dbConfig.database,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
+  });
 
-const db = drizzle(poolConnection, {
-  mode: "default",
-  schema: {
-    config: config,
-    dataSources: dataSources,
-    vectorItems,
-  },
-});
+  activePools.add(poolConnection);
 
-export default db;
+  const db = drizzle(poolConnection, {
+    mode: "default",
+    schema,
+  });
+
+  return {
+    db,
+    close: async () => {
+      activePools.delete(poolConnection);
+      await poolConnection.end();
+    },
+  };
+}
+
+export type TrendPublishDatabase = ReturnType<typeof createMysqlDatabase>["db"];
 
 export async function closeDatabase(): Promise<void> {
-  await poolConnection.end();
+  await Promise.all(
+    [...activePools].map(async (pool) => {
+      activePools.delete(pool);
+      await pool.end();
+    }),
+  );
 }

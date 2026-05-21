@@ -5,7 +5,7 @@ import {
 } from "@src/modules/md-converter/types/index.ts";
 
 export const hrConverter: ConverterFunc<MarkdownElement.HR> = (
-  styles: Theme,
+  _styles: Theme,
 ) => {
   return `<hr />`;
 };

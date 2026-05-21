@@ -1,4 +1,5 @@
 // src/utils/image/image-processor.ts
+import { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
 import { decode, Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 
 interface ImageValidationResult {
@@ -23,10 +24,10 @@ export class WeixinImageProcessor {
     ".webp",
   ];
 
-  private weixinPublisher: any;
+  private imageUploader: ContentImageUploader;
 
-  constructor(weixinPublisher: any) {
-    this.weixinPublisher = weixinPublisher;
+  constructor(imageUploader: ContentImageUploader) {
+    this.imageUploader = imageUploader;
   }
 
   /**
@@ -123,7 +124,7 @@ export class WeixinImageProcessor {
         }
 
         // 上传图片到微信
-        const newUrl = await this.weixinPublisher.uploadContentImage(
+        const newUrl = await this.imageUploader.uploadContentImage(
           imageUrl,
           processedImage ? processedImage : new Uint8Array(imageBuffer),
         );

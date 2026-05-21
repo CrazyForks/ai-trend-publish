@@ -7,7 +7,7 @@ export class VectorSimilarityUtil {
    */
   static cosineSimilarity(vec1: number[], vec2: number[]): number {
     if (vec1.length !== vec2.length) {
-      throw new Error('向量维度不匹配');
+      throw new Error("向量维度不匹配");
     }
 
     const dotProduct = vec1.reduce((acc, val, i) => acc + val * vec2[i], 0);
@@ -26,7 +26,7 @@ export class VectorSimilarityUtil {
    */
   static euclideanDistance(vec1: number[], vec2: number[]): number {
     if (vec1.length !== vec2.length) {
-      throw new Error('向量维度不匹配');
+      throw new Error("向量维度不匹配");
     }
 
     const sum = vec1.reduce((acc, val, i) => {
@@ -45,4 +45,4 @@ export class VectorSimilarityUtil {
   static distanceToSimilarity(distance: number): number {
     return 1 / (1 + distance);
   }
-} 
+}

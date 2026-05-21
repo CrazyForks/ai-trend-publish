@@ -1,25 +1,26 @@
 import {
   ContentSummarizer,
   Summary,
-} from "@src/modules/interfaces/summarizer.interface.ts";
+} from "@src/core/ports/content-summarizer.ts";
+import { LLMProvider } from "@src/core/ports/llm.ts";
 import {
   getSummarizerSystemPrompt,
   getSummarizerUserPrompt,
   getTitleSystemPrompt,
   getTitleUserPrompt,
 } from "@src/prompts/summarizer.prompt.ts";
-import { LLMFactory } from "@src/providers/llm/llm-factory.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";
 import { cleanLLMJsonText, cleanLLMText } from "@src/utils/llm-output.ts";
+import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 
 const logger = new Logger("ai-summarizer");
 
 export class AISummarizer implements ContentSummarizer {
-  private llmFactory: LLMFactory;
-
-  constructor() {
-    this.llmFactory = LLMFactory.getInstance();
+  constructor(
+    private readonly llm: LLMProvider,
+    private readonly promptProfile?: PromptProfileName,
+  ) {
     logger.info("Summarizer使用统一LLM配置");
   }
 
@@ -32,11 +33,10 @@ export class AISummarizer implements ContentSummarizer {
     }
 
     return RetryUtil.retryOperation(async () => {
-      const llm = await this.llmFactory.getDefaultProvider();
-      const response = await llm.createChatCompletion([
+      const response = await this.llm.createChatCompletion([
         {
           role: "system",
-          content: getSummarizerSystemPrompt(),
+          content: getSummarizerSystemPrompt(this.promptProfile),
         },
         {
           role: "user",
@@ -45,6 +45,7 @@ export class AISummarizer implements ContentSummarizer {
             language: options?.language,
             minLength: options?.minLength,
             maxLength: options?.maxLength,
+            promptProfile: this.promptProfile,
           }),
         },
       ], {
@@ -81,17 +82,17 @@ export class AISummarizer implements ContentSummarizer {
     options?: Record<string, any>,
   ): Promise<string> {
     return RetryUtil.retryOperation(async () => {
-      const llm = await this.llmFactory.getDefaultProvider();
-      const response = await llm.createChatCompletion([
+      const response = await this.llm.createChatCompletion([
         {
           role: "system",
-          content: getTitleSystemPrompt(),
+          content: getTitleSystemPrompt(this.promptProfile),
         },
         {
           role: "user",
           content: getTitleUserPrompt({
             content,
             language: options?.language,
+            promptProfile: this.promptProfile,
           }),
         },
       ], {

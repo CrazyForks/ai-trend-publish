@@ -23,46 +23,61 @@
 ## 🔌 外部服务兼容
 
 TrendPublish 默认围绕“一套 LLM + 微信公众号发布”工作，其他能力按需开启。
-所有配置项都在 `.env.example` 中有示例，运行 `deno task doctor`
+项目只从 `trendpublish.config.ts` 读取运行配置；运行 `deno task doctor`
 可以按已开启功能检查缺失项。
 
-| 功能        | 支持服务 / 接口                                 | 用途                                   | 配置项                                                                                     | 什么时候必需             |
-| ----------- | ----------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------ |
-| LLM         | OpenAI Chat Completions 兼容接口                | 内容排序、摘要润色、标题、动态微信模板 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`                                                 | 必需                     |
-| LLM         | OpenAI、DeepSeek、通义千问 DashScope 兼容模式等 | 通过统一 `LLM_*` 接入                  | 同上                                                                                       | 任选一个                 |
-| 微信发布    | 微信公众号草稿 / 发布接口                       | 上传封面、上传正文图片、创建文章       | `WEIXIN_APP_ID`, `WEIXIN_APP_SECRET`                                                       | 正式发布必需             |
-| 生图        | 阿里云百炼 / DashScope 通义万相                 | 生成公众号封面图                       | `DASHSCOPE_API_KEY`                                                                        | 可选，失败会走兜底图     |
-| 抓取        | FireCrawl                                       | 网页内容抓取                           | `FIRE_CRAWL_API_KEY`                                                                       | 文章工作流至少一种抓取源 |
-| 抓取        | Twitter/X API                                   | X/Twitter 内容抓取                     | `X_API_BEARER_TOKEN`                                                                       | 文章工作流至少一种抓取源 |
-| 抓取        | Xquik                                           | Twitter/X 备用抓取源                   | `XQUIK_API_KEY`                                                                            | 文章工作流至少一种抓取源 |
-| 抓取 / 检索 | Jina Reader、Jina DeepSearch                    | URL 阅读、深度搜索                     | `JINA_API_KEY`                                                                             | 可选                     |
-| Embedding   | DashScope OpenAI-compatible Embedding           | 文章向量去重                           | `DASHSCOPE_EMBEDDING_BASE_URL`, `DASHSCOPE_EMBEDDING_API_KEY`, `DASHSCOPE_EMBEDDING_MODEL` | 开启去重时需要           |
-| Embedding   | Jina Embeddings                                 | 向量能力 provider 兼容                 | `JINA_API_KEY`                                                                             | 可选                     |
-| Rerank      | Jina Reranker                                   | 重排 provider 兼容                     | `JINA_API_KEY`                                                                             | 可选                     |
-| 通知        | Bark                                            | 工作流状态通知                         | `ENABLE_BARK`, `BARK_URL`                                                                  | 可选                     |
-| 通知        | 钉钉机器人                                      | 工作流状态通知                         | `ENABLE_DINGDING`, `DINGDING_WEBHOOK`                                                      | 可选                     |
-| 通知        | 飞书机器人                                      | 工作流状态通知                         | `ENABLE_FEISHU`, `FEISHU_WEBHOOK_URL`                                                      | 可选                     |
-| 存储        | MySQL                                           | 数据源配置、向量去重数据               | `ENABLE_DB`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`                 | 可选                     |
+| 功能        | 支持服务 / 接口                                 | 用途                                   | 配置位置                                                                | 什么时候必需            |
+| ----------- | ----------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- | ----------------------- |
+| LLM         | OpenAI Chat Completions 兼容接口                | 内容排序、摘要润色、标题、动态微信模板 | `providers.ai.*`                                                        | 必需                    |
+| LLM         | OpenAI、DeepSeek、通义千问 DashScope 兼容模式等 | 通过统一 `providers.ai` 接入           | 同上                                                                    | 任选一个                |
+| 提示词风格  | technology / business / product 等              | 控制选题、摘要、标题、排版和配图口径   | `features.article.renderer.promptProfile`                               | 可选                    |
+| 微信发布    | 微信公众号草稿 / 发布接口                       | 上传封面、上传正文图片、创建文章       | `providers.publish.weixin.*`                                            | 正式发布必需            |
+| 生图        | 阿里云百炼 / DashScope 通义万相                 | 生成公众号封面图                       | `providers.image.dashscope.apiKey`                                      | 可选，失败会走兜底图    |
+| 正文配图    | 阿里云百炼 / DashScope 通义万相                 | 按文章内容生成正文配图                 | `features.article.bodyImages`                                           | 开启正文 AI 配图时需要  |
+| 数据源      | URL 列表 + 抓取分组前缀                         | 配置文章从哪里抓                       | `features.article.sources`                                              | 文章工作流必需          |
+| 抓取        | FireCrawl                                       | 网页内容抓取                           | `providers.fetch.firecrawl.apiKey`                                      | URL 走 FireCrawl 时必需 |
+| 抓取        | Twitter/X API                                   | X/Twitter 内容抓取                     | `providers.fetch.twitter.bearerToken`                                   | X/Twitter 抓取二选一    |
+| 抓取        | Xquik                                           | Twitter/X 备用抓取源                   | `providers.fetch.twitter.xquikApiKey`                                   | X/Twitter 抓取二选一    |
+| 抓取 / 检索 | Jina Reader、Jina DeepSearch                    | URL 阅读、深度搜索                     | `providers.fetch.jina.apiKey`                                           | 分组使用 Jina 时必需    |
+| 抓取        | RSS / RSSHub                                    | RSS 数据源抓取                         | `providers.fetch.rss`                                                   | RSS URL 可直接使用      |
+| Embedding   | DashScope OpenAI-compatible Embedding           | 文章向量去重                           | `features.article.deduplication` + `providers.vector.embedding.*`       | 开启去重时需要          |
+| 通知        | Bark                                            | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.bark`     | 可选                    |
+| 通知        | 钉钉机器人                                      | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.dingtalk` | 可选                    |
+| 通知        | 飞书机器人                                      | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.feishu`   | 可选                    |
+| 存储        | MySQL                                           | 保存向量去重等业务数据                 | `storage.mysql.*`                                                       | 可选                    |
 
 最小可运行配置只需要：
 
-```bash
-SERVER_API_KEY=your-api-key
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=your-api-key
-LLM_MODEL=deepseek-chat
+```ts
+import { defineConfig } from "./src/utils/config/define-config.ts";
+
+export default defineConfig({
+  server: { apiKey: "your-api-key" },
+  providers: {
+    ai: {
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "your-api-key",
+      model: "deepseek-chat",
+    },
+  },
+});
 ```
 
 常见组合：
 
-- 只本地预览模板：配置 `LLM_*` 后运行 `deno task preview`。
-- 跑微信文章 dry-run：配置 `LLM_*`，并至少配置
-  `FIRE_CRAWL_API_KEY`、`X_API_BEARER_TOKEN` 或 `XQUIK_API_KEY` 之一。
-- 正式发布公众号：额外配置 `WEIXIN_APP_ID`、`WEIXIN_APP_SECRET`，并确认公众号 IP
-  白名单。
-- 生成封面图：配置 `DASHSCOPE_API_KEY`，未配置或生成失败时会使用默认兜底封面。
-- 开启文章去重：设置 `ENABLE_DEDUPLICATION=true`，并配置 DashScope Embedding 和
-  MySQL。
+- 只本地预览模板：配置 `providers.ai.*` 后运行 `deno task preview`。
+- 跑微信文章 dry-run：配置 `providers.ai.*`、`features.article.sources` 和对应的
+  `providers.fetch.*`。
+- 正式发布公众号：额外配置 `providers.publish.weixin.appId`、
+  `providers.publish.weixin.appSecret`，并确认公众号 IP 白名单。
+- 生成封面图：配置
+  `providers.image.dashscope.apiKey`，未配置或生成失败时会使用默认兜底封面。
+- 生成正文配图：设置 `features.article.bodyImages.mode` 为 `missing` 或
+  `all`，并配置 `providers.image.dashscope.apiKey`。
+- 开启文章去重：设置 `features.article.deduplication.enabled=true`，并配置
+  DashScope Embedding 和 MySQL。
+- 开启通知：在 `features.article.notifications.channels` 中加入
+  `bark`、`dingtalk` 或 `feishu`，并配置对应 `providers.notify.*` 凭证。
 
 ## 🚀 快速开始
 
@@ -90,11 +105,11 @@ git clone https://github.com/liyown/ai-trend-publish
 cd ai-trend-publish
 ```
 
-### 3. 配置环境变量
+### 3. 配置项目
 
 ```bash
-cp .env.example .env
-# 编辑 .env 文件配置必要的环境变量
+cp trendpublish.config.example.ts trendpublish.config.ts
+# 编辑 trendpublish.config.ts
 ```
 
 ### 4. 开发和运行
@@ -179,7 +194,8 @@ npm run docs:build
 
 ## 📝 文章模板
 
-TrendPublish 提供了多种微信公众号文章模板，可通过 `ARTICLE_TEMPLATE_TYPE`
+TrendPublish 提供了多种微信公众号文章模板，可通过
+`features.article.renderer.template`
 选择：`default`、`modern`、`tech`、`mianpro`、
 `longform`、`product`、`minimal`、`darktech`、`dynamic` 或 `random`。查看
 [模板展示页面](https://liyown.github.io/ai-trend-publish/templates)
@@ -204,7 +220,7 @@ deno task article:dry
 - [x] 大模型每周排行榜
 - [x] 热门AI相关仓库推荐
 - [x] 添加通义千问（Qwen）支持
-- [x] 使用统一 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 配置全局模型
+- [x] 使用统一 `providers.ai` 配置全局模型
 - [x] 新增配置体检、微信模板预览和文章 dry-run 命令
 
 ## Todo
@@ -256,17 +272,17 @@ deno task article:dry
 git clone https://github.com/liyown/ai-trend-publish
 ```
 
-2. 配置环境变量
+2. 配置项目
 
 ```bash
-cp .env.example .env
+cp trendpublish.config.example.ts trendpublish.config.ts
 # 先填最小配置，再按需开启抓取、发布、生图、去重和通知
 deno task doctor
 ```
 
-## ⚙️ 环境变量配置
+## ⚙️ 配置文件
 
-在 `.env` 文件中配置必要的环境变量。完整说明见
+在 `trendpublish.config.ts` 中配置必要参数。完整说明见
 [配置说明](docs/configuration.md)，Jina 相关能力见
 [Jina Integration Guide](docs/integrations/jina-integration-guide.md)。
 
@@ -323,11 +339,11 @@ git clone https://github.com/liyown/ai-trend-publish.git
 cd ai-trend-publish
 ```
 
-3. 配置环境变量
+3. 配置项目
 
 ```bash
-cp .env.example .env
-# 编辑 .env 文件配置必要的环境变量
+cp trendpublish.config.example.ts trendpublish.config.ts
+# 编辑 trendpublish.config.ts
 ```
 
 4. 启动服务
@@ -341,7 +357,7 @@ deno task article:dry
 
 # 使用PM2进行进程管理（推荐）
 npm install -g pm2
-pm2 start --interpreter="deno" --interpreter-args="run --allow-all" src/main.ts
+pm2 start --interpreter="deno" --interpreter-args="run --allow-all" src/index.ts
 ```
 
 5. 设置开机自启（可选）
@@ -370,28 +386,24 @@ docker build -t ai-trend-publish .
 4. 运行容器：
 
 ```bash
-# 方式1：通过环境变量文件运行
-docker run -d --env-file .env --name ai-trend-publish-container ai-trend-publish
-
-# 方式2：直接指定环境变量运行
+# 运行前确保镜像中包含 trendpublish.config.ts，或通过挂载提供
 docker run -d \
-  -e XXXX=XXXX \
-  ...其他环境变量... \
+  -v $(pwd)/trendpublish.config.ts:/app/trendpublish.config.ts \
   --name ai-trend-publish-container \
   ai-trend-publish
 ```
 
 ### CI/CD 自动部署
 
-项目已配置 GitHub Actions 自动部署流程：
+项目保留 GitHub Actions 手动部署流程：
 
-1. 推送代码到 main 分支会自动触发部署
-2. 也可以在 GitHub Actions 页面手动触发部署
-3. 确保在 GitHub Secrets 中配置以下环境变量：
+1. 在 GitHub Actions 页面手动触发 `Deploy to Production`
+2. 确保部署环境中提供 `trendpublish.config.ts`
+3. 当前 release tag 不会自动触发生产部署，避免未配置环境被自动覆盖
+4. 需要配置以下 SSH secret：
    - `SERVER_HOST`: 服务器地址
    - `SERVER_USER`: 服务器用户名
    - `SSH_PRIVATE_KEY`: SSH 私钥
-   - 其他必要的环境变量（参考 .env.example）
 
 ## 模板开发指南
 
@@ -399,13 +411,14 @@ docker run -d \
 
 ### 1. 了解数据结构
 
-查看 `src/modules/render/interfaces`
-目录下的类型定义文件，了解各个渲染模块需要的数据结构
+查看 `src/features/weixin-article/domain/renderable-article.ts`
+中的类型定义，了解微信文章渲染需要的数据结构。
 
 ### 2. 开发模板
 
-在 `src/modules/render/weixin/templates` 目录下按照对应模块开发 EJS 模板。
-动态模板逻辑位于 `src/modules/render/weixin/dynamic`，不依赖固定 EJS 文件。
+在 `src/features/weixin-article/rendering/templates` 目录下开发 EJS 模板。
+动态模板逻辑位于 `src/features/weixin-article/rendering/dynamic`，不依赖固定 EJS
+文件。
 
 ### 3. 注册模板
 

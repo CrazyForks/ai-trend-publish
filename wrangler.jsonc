@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trendpublish",
+  "main": "src/platform/cloudflare/worker.ts",
+  "compatibility_date": "2026-05-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["0 19 * * *"]
+  },
+  "workflows": [
+    {
+      "name": "weixin-article-workflow",
+      "binding": "WEIXIN_ARTICLE_WORKFLOW",
+      "class_name": "WeixinArticleCloudflareWorkflow"
+    }
+  ]
+}

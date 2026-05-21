@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-05-21
+
+### 架构与配置
+
+- 重构项目为以 `src/app/weixin-article` 组装、`features/weixin-article`
+  承载业务、 `integrations` 适配外部服务、`core/ports` 定义端口的模块化结构。
+- 使用 `trendpublish.config.ts` 作为唯一运行配置入口，移除旧环境变量配置兼容，
+  配置类型提供中文 TSDoc 和更完整的字段提示。
+- 收敛配置模型：`providers` 只保留凭证和 provider 默认参数，功能开关与 provider
+  选择统一放入 `features.article`。
+- 新增 `features.article.notifications.channels`，通知渠道由 feature 显式启用，
+  `providers.notify.*` 只保存 webhook / URL。
+- 新增 URL 数据源前缀和 `fetchGroups` 抓取分组，支持按分组顺序 fallback。
+- 将向量去重、图片生成、发布、通知和抓取能力通过 port / registry / app
+  组装层注入，减少业务层对具体实现的依赖。
+
+### 微信文章工作流
+
+- 聚焦微信文章发布流程，移除旧的非文章工作流和按周 workflow 机制。
+- 新增多套提示词风格：`technology`、`general`、`business`、`product`、
+  `developer`、`research`，统一影响排序、摘要、标题、动态模板和配图提示词。
+- 新增正文 AI 智能配图能力，可通过 `features.article.bodyImages` 开关控制。
+- 优化 LLM 输出清理，统一兼容 `<think>`、Markdown fence、JSON 包裹文本等响应。
+- 标题生成失败时使用本地兜底标题，降低发布链路失败率。
+- 封面图和正文配图失败时保持 workflow 可继续，减少外部生图服务波动影响。
+
+### 发布与文档
+
+- 更新 `deno task`：推荐 `doctor`、`verify`、`preview`、`article:dry`。
+- 更新 README、配置文档、架构文档、模板文档和快速开始，统一说明新配置结构。
+- 新增 release readiness 静态检查，防止旧配置名、旧路径和已删除 workflow
+  回流到文档或示例。
+- 修复 GitHub Release workflow，改为编译 `src/index.ts` 并包含新的微信模板目录。
+- 调整生产部署 workflow 为手动触发，避免 release tag 自动触发旧部署流程。
+
 ## [1.0.8] - 2026-05-21
 
 ### 微信文章模板
@@ -9,8 +44,8 @@
 - 新增 `dynamic` 微信文章模板，支持根据文章内容调用 AI 实时生成公众号内联 HTML。
 - 新增动态模板后处理与校验，清理公众号不兼容标签和属性，并在生成失败时回退
   `minimal`。
-- 简化模型配置，内容排序、摘要、标题和动态模板默认统一使用 `LLM_*` 配置。
-- 新增 `deno task doctor` 配置体检命令，方便快速定位缺失环境变量。
+- 简化模型配置，内容排序、摘要、标题和动态模板默认统一使用 `providers.ai` 配置。
+- 新增 `deno task doctor` 配置体检命令，方便快速定位缺失配置。
 - 新增 `deno task preview:weixin` 微信模板预览命令。
 - 新增 `deno task run:article:dry` 微信文章 dry-run 调试模式，跳过发布并输出本地
   HTML。
@@ -21,7 +56,8 @@
 - 优化 `default`、`modern`、`tech`、`mianpro` 模板的公众号兼容性与排版层级。
 - 将微信模板结构统一调整为更适合公众号编辑器的内联样式与 `section` 标签。
 - 更新模板预览测试，使用稳定占位图生成本地预览，避免示例图片失效。
-- 更新模板展示文档，补充所有微信文章模板截图与 `ARTICLE_TEMPLATE_TYPE` 可选值。
+- 更新模板展示文档，补充所有微信文章模板截图与
+  `features.article.renderer.template` 可选值。
 
 ## [1.0.2] - 2024-03-11
 
@@ -61,8 +97,8 @@
 
 ### 配置管理
 
-- 新增文章数量环境变量配置
-  - 在.env.example中添加ARTICLE_NUM配置项
+- 新增文章数量配置
+  - 在旧配置示例中添加文章数量配置项
   - 更新README.md文档，添加相关配置说明
 
 ### 依赖更新

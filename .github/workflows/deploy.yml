@@ -1,9 +1,6 @@
 name: Deploy to Production # 部署到生产环境
 
 on:
-  push:
-    tags:
-      - "v*" # 当创建以v开头的tag时触发
   workflow_dispatch: # 允许手动触发工作流
 
 jobs:

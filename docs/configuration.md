@@ -1,62 +1,94 @@
 # 配置说明
 
-本项目使用 `.env` 作为主要配置来源。建议从 `.env.example` 复制后逐步填充。
+本项目推荐使用 `trendpublish.config.ts` 作为主要配置来源。它有 TypeScript
+类型提示，适合集中组织模型、抓取源、微信发布、图片和通知配置。
 
 ```bash
-cp .env.example .env
+cp trendpublish.config.example.ts trendpublish.config.ts
 deno task doctor
 ```
 
-`doctor` 会按功能块检查配置，并把 `your_api_key`、`change-me`
-这类占位值视为未配置。
+运行配置只从 `trendpublish.config.ts`
+读取。数据库只保存业务数据，例如向量去重数据，不再保存运行配置。`doctor`
+会按功能块检查缺失项，并把 `your_api_key`、`change-me` 这类占位值视为未配置。
 
 ## 最小配置
 
 如果只是启动服务、预览模板、跑 AI 摘要和动态模板，先填这一组：
 
-```bash
-SERVER_API_KEY=your-api-key
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=your_api_key
-LLM_MODEL=deepseek-chat
+```ts
+import { defineConfig } from "./src/utils/config/define-config.ts";
+
+export default defineConfig({
+  server: { apiKey: "your-api-key" },
+  providers: {
+    ai: {
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "your_api_key",
+      model: "deepseek-chat",
+    },
+  },
+  features: {
+    article: {
+      renderer: { template: "minimal" },
+      dryRun: true,
+    },
+  },
+});
 ```
 
 如果要正式发布到微信公众号，还必须填：
 
-```bash
-WEIXIN_APP_ID=your_app_id
-WEIXIN_APP_SECRET=your_app_secret
+```ts
+providers: {
+  publish: {
+    weixin: {
+      appId: "your_app_id",
+      appSecret: "your_app_secret",
+    },
+  },
+}
 ```
 
 ## 功能开关与必需配置
 
-| 想开启的功能             | 开关 / 使用方式                           | 必需配置                                                      | 说明                                       |
-| ------------------------ | ----------------------------------------- | ------------------------------------------------------------- | ------------------------------------------ |
-| 启动 JSON-RPC 服务       | `deno task dev`                           | `SERVER_API_KEY`                                              | API 请求需带 `Authorization: Bearer <key>` |
-| AI 摘要、排序、动态模板  | 默认开启                                  | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`                    | 使用 OpenAI Chat Completions 兼容接口      |
-| 本地模板预览             | `deno task preview`                       | `LLM_*`                                                       | 静态模板不依赖公众号配置                   |
-| 微信文章 dry-run         | `deno task article:dry` 或 `DRY_RUN=true` | `LLM_*`，至少一个抓取源 key                                   | 不发布、不上传图片，会输出本地 HTML        |
-| 微信公众号正式发布       | `deno task article`                       | `WEIXIN_APP_ID`, `WEIXIN_APP_SECRET`                          | 还需要公众号后台 IP 白名单                 |
-| FireCrawl 抓取           | 配置 FireCrawl 数据源                     | `FIRE_CRAWL_API_KEY`                                          | 网页内容抓取                               |
-| Twitter/X 抓取           | 配置 Twitter/X 数据源                     | `X_API_BEARER_TOKEN` 或 `XQUIK_API_KEY`                       | Xquik 是备用抓取源                         |
-| Jina Reader / DeepSearch | 使用 Jina 抓取/检索 provider              | `JINA_API_KEY`                                                | 也可复用到 Jina Embedding / Reranker       |
-| 阿里云封面生图           | 配置 `DASHSCOPE_API_KEY`                  | `DASHSCOPE_API_KEY`                                           | 未配置或失败时使用兜底封面                 |
-| 文章向量去重             | `ENABLE_DEDUPLICATION=true`               | `DASHSCOPE_EMBEDDING_*`, `DB_*`                               | 当前文章去重会写入 MySQL                   |
-| 数据库数据源             | `ENABLE_DB=true`                          | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE` | 用数据库追加数据源配置                     |
-| Bark 通知                | `ENABLE_BARK=true`                        | `BARK_URL`                                                    | 工作流状态通知                             |
-| 钉钉通知                 | `ENABLE_DINGDING=true`                    | `DINGDING_WEBHOOK`                                            | 工作流状态通知                             |
-| 飞书通知                 | `ENABLE_FEISHU=true`                      | `FEISHU_WEBHOOK_URL`                                          | 工作流状态通知                             |
+| 想开启的功能            | TS 配置位置                                                                         | 说明                                       |
+| ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------ |
+| 启动 JSON-RPC 服务      | `server.apiKey`                                                                     | API 请求需带 `Authorization: Bearer <key>` |
+| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                    | 使用 OpenAI Chat Completions 兼容接口      |
+| 本地模板预览            | `features.article.renderer.template`                                                | 静态模板不依赖公众号配置                   |
+| 提示词风格              | `features.article.renderer.promptProfile`                                           | 控制排序、摘要、标题、动态排版和配图口径   |
+| 微信文章 dry-run        | `features.article.dryRun: true`                                                     | 不发布、不上传图片，会输出本地 HTML        |
+| 微信公众号正式发布      | `providers.publish.weixin.appId`, `providers.publish.weixin.appSecret`              | 还需要公众号后台 IP 白名单                 |
+| 文章数据源              | `features.article.sources`                                                          | URL 列表，可用抓取分组前缀                 |
+| 抓取供应商              | `providers.fetch.*`                                                                 | FireCrawl、Twitter/X、Xquik、Jina、RSS     |
+| 阿里云封面生图          | `features.article.cover`, `providers.image.dashscope.apiKey`                        | 未配置或失败时使用兜底封面                 |
+| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片 |
+| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.mysql.*` | 当前文章去重会写入 MySQL                   |
+| 数据库业务数据          | `storage.mysql.enabled`                                                             | 保存向量去重等业务数据                     |
+| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                  | channels 中包含 `bark` 时检查 Bark URL     |
+| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`              | channels 中包含 `dingtalk` 时检查 webhook  |
+| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                | channels 中包含 `feishu` 时检查 webhook    |
 
 ## 推荐配置路径
 
 ### 1. 只看模板效果
 
-```bash
-SERVER_API_KEY=your-api-key
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=your_api_key
-LLM_MODEL=deepseek-chat
-ARTICLE_TEMPLATE_TYPE=minimal
+```ts
+server: { apiKey: "your-api-key" },
+providers: {
+  ai: {
+    baseUrl: "https://api.deepseek.com/v1",
+    apiKey: "your_api_key",
+    model: "deepseek-chat",
+  },
+},
+features: {
+  article: {
+    renderer: { template: "minimal" },
+    dryRun: true,
+  },
+},
 ```
 
 运行：
@@ -67,15 +99,40 @@ deno task preview
 
 ### 2. 跑一次微信文章 dry-run
 
-在最小配置基础上，至少配置一种抓取源：
+在最小配置基础上，配置抓取供应商和 URL 列表：
 
-```bash
-FIRE_CRAWL_API_KEY=your_firecrawl_key
-# 或
-X_API_BEARER_TOKEN=your_twitterapi_key
-# 或
-XQUIK_API_KEY=your_xquik_key
+```ts
+providers: {
+  fetch: {
+    firecrawl: { apiKey: "your_firecrawl_key" },
+    twitter: { xquikApiKey: "your_xquik_key" },
+    jina: { apiKey: "your_jina_key" },
+  },
+},
+fetchGroups: {
+  default: ["auto"],
+  web: ["firecrawl", "jina"],
+  social: ["twitter"],
+},
+features: {
+  article: {
+    dryRun: true,
+    renderer: {
+      template: "dynamic",
+      promptProfile: "technology",
+    },
+    sources: [
+      "https://news.ycombinator.com/",
+      "web:https://openai.com/news/",
+      "social:https://x.com/OpenAIDevs",
+    ],
+  },
+},
 ```
+
+无前缀 URL 使用 `fetchGroups.default`；`web:`、`social:` 是自定义抓取分组名。
+分组内 provider 按顺序 fallback，成功一个就停止。`auto` 会按 URL 推断：
+Twitter/X 域名走 Twitter，RSS/RSSHub 走 RSS，其余网页走 FireCrawl。
 
 运行：
 
@@ -87,10 +144,16 @@ deno task article:dry
 
 在 dry-run 跑通后，再配置：
 
-```bash
-WEIXIN_APP_ID=your_app_id
-WEIXIN_APP_SECRET=your_app_secret
-DRY_RUN=false
+```ts
+providers: {
+  publish: {
+    weixin: {
+      appId: "your_app_id",
+      appSecret: "your_app_secret",
+    },
+  },
+},
+features: { article: { dryRun: false } },
 ```
 
 运行：
@@ -101,27 +164,94 @@ deno task article
 
 ### 4. 开启封面生图
 
-```bash
-DASHSCOPE_API_KEY=your_dashscope_key
+```ts
+providers: {
+  image: { dashscope: { apiKey: "your_dashscope_key" } },
+},
+features: {
+  article: {
+    cover: { enabled: true, provider: "dashscope" },
+  },
+},
 ```
 
 封面生成失败不会中断主流程，会回退默认封面。
 
-### 5. 开启文章去重
+### 5. 开启正文 AI 智能配图
 
-```bash
-ENABLE_DEDUPLICATION=true
-DASHSCOPE_EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-DASHSCOPE_EMBEDDING_API_KEY=your_dashscope_key
-DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3
-
-ENABLE_DB=true
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_DATABASE=trendfinder
+```ts
+providers: {
+  image: { dashscope: { apiKey: "your_dashscope_key" } },
+},
+features: {
+  article: {
+    bodyImages: {
+      mode: "missing",
+      provider: "dashscope",
+      count: 1,
+      size: "1024*1024",
+    },
+  },
+},
 ```
+
+默认只在文章没有抓取到原文 `media` 图片时生成正文配图。生成失败不会中断发布，
+会回退到已有 media 图片布局。
+
+### 6. 开启文章去重
+
+```ts
+providers: {
+  vector: {
+    embedding: {
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      apiKey: "your_dashscope_key",
+      model: "text-embedding-v3",
+    },
+  },
+},
+features: {
+  article: {
+    deduplication: {
+      enabled: true,
+      embeddingProvider: "dashscope",
+      vectorStore: "mysql",
+    },
+  },
+},
+storage: {
+  mysql: {
+    enabled: true,
+    host: "localhost",
+    port: 3306,
+    user: "root",
+    password: "your_password",
+    database: "trendfinder",
+  },
+},
+```
+
+### 7. 开启工作流通知
+
+```ts
+providers: {
+  notify: {
+    bark: { url: "https://api.day.app/your_key" },
+    dingtalk: { webhook: "https://oapi.dingtalk.com/robot/send?access_token=..." },
+    feishu: { webhookUrl: "https://open.feishu.cn/open-apis/bot/v2/hook/..." },
+  },
+},
+features: {
+  article: {
+    notifications: {
+      channels: ["bark"],
+    },
+  },
+},
+```
+
+通知是否启用只看 `features.article.notifications.channels`；`providers.notify.*`
+只保存对应渠道的凭证。
 
 ## 模型配置
 
@@ -129,19 +259,42 @@ DB_DATABASE=trendfinder
 
 常见兼容 OpenAI Chat Completions 的供应商示例：
 
-- OpenAI: `LLM_BASE_URL="https://api.openai.com/v1"`，`LLM_MODEL="gpt-4o-mini"`
-- DeepSeek:
-  `LLM_BASE_URL="https://api.deepseek.com/v1"`，`LLM_MODEL="deepseek-chat"`
+- OpenAI: `baseUrl: "https://api.openai.com/v1"`，`model: "gpt-4o-mini"`
+- DeepSeek: `baseUrl: "https://api.deepseek.com/v1"`，`model: "deepseek-chat"`
 - Qwen:
-  `LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"`，`LLM_MODEL="qwen-max"`
+  `baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"`，`model: "qwen-max"`
 
-旧版的
-`DEFAULT_LLM_PROVIDER`、`AI_CONTENT_RANKER_LLM_PROVIDER`、`AI_SUMMARIZER_LLM_PROVIDER`
-仍兼容，但不建议新配置继续拆分多套模型。
+## 提示词风格
+
+`features.article.renderer.promptProfile`
+控制同一条微信文章链路里的排序、摘要、标题、动态模板和 AI 配图口径。默认值是
+`technology`，适合 AI 科技资讯。
+
+可选值：
+
+- `technology`: AI 科技趋势，关注模型、产品、开源、工程和科技商业动态。
+- `general`: 通用资讯，适合更宽泛的信息简报。
+- `business`: 商业与产业，关注公司战略、资本、市场和产业信号。
+- `product`: 产品与体验，关注产品更新、用户价值、设计和工作流。
+- `developer`: 开发者与工程，关注开源、API、架构、部署和工程实践。
+- `research`: 学术与研究，关注论文、方法、实验、评测和模型能力。
+
+示例：
+
+```ts
+features: {
+  article: {
+    renderer: {
+      template: "dynamic",
+      promptProfile: "business",
+    },
+  },
+},
+```
 
 ## 微信文章模板
 
-`ARTICLE_TEMPLATE_TYPE` 可选值：
+`features.article.renderer.template` 可选值：
 
 - `default`: 微信原生正式风
 - `modern`: 蓝青科技资讯风
@@ -156,24 +309,14 @@ DB_DATABASE=trendfinder
 
 ## 定时任务
 
-每天凌晨 3 点（`Asia/Shanghai`）执行一次，执行的工作流由下列键控制：
-
-```bash
-1_of_week_workflow=weixin-article-workflow
-2_of_week_workflow=weixin-aibench-workflow
-3_of_week_workflow=weixin-hellogithub-workflow
-```
-
-支持值：
-
-- `weixin-article-workflow`
-- `weixin-aibench-workflow`
-- `weixin-hellogithub-workflow`
+服务启动后每天凌晨 3 点（`Asia/Shanghai`）固定执行微信文章发布工作流
+`weixin-article-workflow`。项目不再按星期切换其他工作流。
 
 ## 排查建议
 
-- 每次改完 `.env` 后先跑 `deno task doctor`。
+- 每次改完 `trendpublish.config.ts` 后先跑 `deno task doctor`。
 - 先跑 `deno task preview`，再跑 `deno task article:dry`，最后再正式发布。
-- 新环境建议先关闭 `ENABLE_DB`、`ENABLE_DEDUPLICATION`
+- 新环境建议先关闭
+  `storage.mysql.enabled`、`features.article.deduplication.enabled`
   和通知，跑通主链路后再逐项开启。
-- API Key 不要写入仓库，统一走 `.env` 与 CI Secret。
+- 本地真实的 `trendpublish.config.ts` 已加入 `.gitignore`，不要提交真实密钥。

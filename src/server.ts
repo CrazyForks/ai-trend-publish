@@ -1,7 +1,6 @@
 import { triggerWorkflow } from "./controllers/workflow.controller.ts";
 import { WorkflowType } from "./controllers/cron.ts";
-import { ConfigManager } from "@src/utils/config/config-manager.ts";
-
+import { getAppConfig } from "@src/utils/config/app-config.ts";
 
 export interface JSONRPCRequest {
   jsonrpc: string;
@@ -28,8 +27,10 @@ export class JSONRPCServer {
     this.routes = {};
   }
 
-
-  registerRoute(method: string, handler: (params: Record<string, any>) => Promise<any>) {
+  registerRoute(
+    method: string,
+    handler: (params: Record<string, any>) => Promise<any>,
+  ) {
     this.routes[method] = handler;
   }
 
@@ -55,7 +56,7 @@ export class JSONRPCServer {
       }
 
       const result = await handler(body.params || {});
-      
+
       return new Response(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -67,7 +68,7 @@ export class JSONRPCServer {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
     } catch (error) {
       const isClientError = error instanceof Error && (
@@ -93,7 +94,7 @@ export class JSONRPCServer {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
     }
   }
@@ -107,11 +108,13 @@ rpcServer.registerRoute("triggerWorkflow", triggerWorkflow);
 const handler = async (req: Request): Promise<Response> => {
   try {
     // 验证 Authorization 请求头
-    const configManager = ConfigManager.getInstance();
-    const API_KEY = await configManager.get("SERVER_API_KEY");
+    const API_KEY = (await getAppConfig()).server.apiKey;
 
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.split(" ")[1] !==  API_KEY) {
+    if (
+      !authHeader || !authHeader.startsWith("Bearer ") ||
+      authHeader.split(" ")[1] !== API_KEY
+    ) {
       return new Response(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -119,24 +122,24 @@ const handler = async (req: Request): Promise<Response> => {
             code: -32001,
             message: "未授权的访问",
             data: {
-              error: "缺少有效的 Authorization 请求头"
-            }
+              error: "缺少有效的 Authorization 请求头",
+            },
           },
         }),
         {
           status: 401,
           headers: {
             "Content-Type": "application/json",
-          }
-        }
+          },
+        },
       );
     }
 
     const url = new URL(req.url);
-    
+
     // 规范化路径（移除开头和结尾的斜杠，处理可能的错误格式）
     const normalizedPath = url.pathname.replace(/^\/+|\/+$/g, "");
-    
+
     // 只处理 api/workflow 路径的请求
     if (normalizedPath === "api/workflow") {
       return await rpcServer.handleRequest(req);
@@ -151,16 +154,16 @@ const handler = async (req: Request): Promise<Response> => {
           message: "无效的API路径",
           data: {
             path: normalizedPath,
-            expectedPath: "api/workflow"
-          }
+            expectedPath: "api/workflow",
+          },
         },
       }),
       {
         status: 404,
         headers: {
           "Content-Type": "application/json",
-        }
-      }
+        },
+      },
     );
   } catch (error) {
     console.error("请求处理错误:", error);
@@ -171,16 +174,16 @@ const handler = async (req: Request): Promise<Response> => {
           code: -32603,
           message: "服务器内部错误",
           data: {
-            error: error instanceof Error ? error.message : String(error)
-          }
+            error: error instanceof Error ? error.message : String(error),
+          },
         },
       }),
       {
         status: 500,
         headers: {
           "Content-Type": "application/json",
-        }
-      }
+        },
+      },
     );
   }
 };
@@ -190,5 +193,5 @@ export default function startServer(port = 8000) {
   console.log(`JSON-RPC 服务器运行在 http://localhost:${port}`);
   console.log("支持的方法:");
   console.log("- triggerWorkflow");
-  console.log(`可用的工作流类型: ${Object.values(WorkflowType).join(", ")}`);
+  console.log(`默认工作流: ${WorkflowType.WeixinArticle}`);
 }

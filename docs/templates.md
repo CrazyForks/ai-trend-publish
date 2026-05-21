@@ -16,10 +16,16 @@ TrendPublish 提供了多种可用于内容发布的模板。
 | darktech | ![darktech](https://oss.liuyaowen.cn/images/weixin-template-darktech.png) | 深色研究笔记风，适合高信息密度的技术摘要                           |
 | dynamic  | 本地预览生成                                                              | AI 根据本次文章内容实时生成公众号内联 HTML，失败自动回退 `minimal` |
 
-通过 `ARTICLE_TEMPLATE_TYPE` 选择微信文章模板：
+通过 `features.article.renderer.template` 选择微信文章模板：
 
-```bash
-ARTICLE_TEMPLATE_TYPE="dynamic"
+```ts
+features: {
+  article: {
+    renderer: {
+      template: "dynamic",
+    },
+  },
+}
 ```
 
 可选值：`default`、`modern`、`tech`、`mianpro`、`longform`、`product`、`minimal`、`darktech`、`dynamic`、`random`。
@@ -35,9 +41,3 @@ deno task preview
 ```
 
 预览文件会输出到 `src/temp/preview_weixin_*.html`。
-
-## 热门仓库模板
-
-| 模板名    | 预览                                                              | 说明                        |
-| --------- | ----------------------------------------------------------------- | --------------------------- |
-| github-ai | ![github-ai](https://oss.liuyaowen.cn/images/202503081200433.png) | GitHub 热门 AI 仓库展示模板 |

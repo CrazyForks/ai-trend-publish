@@ -4,13 +4,19 @@ Jina 在本项目中用于抓取增强、深度检索、向量化与重排。
 
 ## 使用前提
 
-在 `.env` 中设置：
+在 `trendpublish.config.ts` 中设置：
 
-```bash
-JINA_API_KEY="your_jina_api_key"
+```ts
+providers: {
+  fetch: {
+    jina: {
+      apiKey: "your_jina_api_key",
+    },
+  },
+}
 ```
 
-未设置时，相关模块会报 `JINA_API_KEY environment variable is not set`。
+未设置时，相关模块会报 `providers.fetch.jina.apiKey is not set`。
 
 ## 涉及能力
 
@@ -21,10 +27,10 @@ JINA_API_KEY="your_jina_api_key"
 
 ## 代码位置
 
-- Reader: `src/modules/scrapers/jina/jina.scraper.ts`
-- DeepSearch: `src/modules/scrapers/jina/jina.deepsearch.scraper.ts`
-- Embedding: `src/providers/embedding/jina/jina.embedding.ts`
-- Reranker: `src/providers/reranker/jina/jina.reranker.ts`
+- Reader: `src/integrations/fetch/providers/jina/jina-reader-scraper.ts`
+- DeepSearch: `src/integrations/fetch/providers/jina/jina-deepsearch-scraper.ts`
+- Embedding: `src/integrations/vector/providers/jina/jina-embedding-provider.ts`
+- Reranker: `src/integrations/vector/providers/jina/jina-reranker-provider.ts`
 
 ## 典型使用场景
 
@@ -36,7 +42,7 @@ JINA_API_KEY="your_jina_api_key"
 
 ### 报 401/403
 
-- 检查 `JINA_API_KEY` 是否正确、是否过期。
+- 检查 `providers.fetch.jina.apiKey` 是否正确、是否过期。
 
 ### 响应慢或超时
 

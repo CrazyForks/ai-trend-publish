@@ -6,7 +6,8 @@
 
 - `/.github/workflows/deploy.yml`
 
-该流程在打 Tag（`v*`）或手动触发时，将服务部署到远端服务器并用 `pm2` 启动。
+该流程目前仅支持手动触发，避免 release tag 自动覆盖生产环境。触发前需要确保目标
+服务器上的 `trendpublish.config.ts` 已按生产环境配置好，再用 `pm2` 启动服务。
 
 ## 文档部署（GitHub Pages）
 
