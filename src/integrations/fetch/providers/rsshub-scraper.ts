@@ -117,7 +117,6 @@ import {
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
 import { XMLParser } from "npm:fast-xml-parser";
-import LRUCache from "npm:lru-cache";
 
 // 类型定义
 /**
@@ -146,6 +145,85 @@ interface RSSHubError extends Error {
   endpoint?: string;
 }
 
+interface CacheEntry {
+  value: unknown;
+  expiresAt: number;
+}
+
+interface TtlCacheOptions {
+  max: number;
+  ttl: number;
+}
+
+class TtlCache {
+  private entries = new Map<string, CacheEntry>();
+
+  constructor(private options: TtlCacheOptions) {}
+
+  get(key: string): unknown | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) {
+      return undefined;
+    }
+    if (Date.now() > entry.expiresAt) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.value;
+  }
+
+  set(key: string, value: unknown): void {
+    if (this.entries.has(key)) {
+      this.entries.delete(key);
+    }
+    this.entries.set(key, {
+      value,
+      expiresAt: Date.now() + this.options.ttl,
+    });
+    this.trim();
+  }
+
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+
+  keys(): IterableIterator<string> {
+    this.pruneExpired();
+    return this.entries.keys();
+  }
+
+  clear(): void {
+    this.entries.clear();
+  }
+
+  reset(options: TtlCacheOptions): void {
+    this.options = options;
+    this.clear();
+  }
+
+  private trim(): void {
+    this.pruneExpired();
+    while (this.entries.size > this.options.max) {
+      const oldest = this.entries.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      this.entries.delete(oldest.value);
+    }
+  }
+
+  private pruneExpired(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.entries) {
+      if (now > entry.expiresAt) {
+        this.entries.delete(key);
+      }
+    }
+  }
+}
+
 // 默认配置
 const defaultConfig: RSSHubConfig = {
   baseURL: "https://rsshub.app",
@@ -157,7 +235,7 @@ const defaultConfig: RSSHubConfig = {
 
 // 配置和缓存实例
 const config = { ...defaultConfig };
-const cache = new LRUCache({
+const cache = new TtlCache({
   max: config.cacheSize || 100,
   ttl: config.cacheMaxAge || 5 * 60 * 1000,
 });
@@ -633,7 +711,10 @@ request.config = function (values: Partial<RSSHubConfig>) {
 
   // 更新缓存配置
   if (values.cacheSize || values.cacheMaxAge) {
-    cache.reset();
+    cache.reset({
+      max: config.cacheSize || 100,
+      ttl: config.cacheMaxAge || 5 * 60 * 1000,
+    });
   }
 };
 
