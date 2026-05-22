@@ -49,7 +49,8 @@
    `providers.publish.weixin.appSecret`。
 2. 检查公众号后台 IP 白名单。
 3. 检查模板中是否有超长内容或不合法 HTML。
-4. 先执行 `deno task article:dry`，确认抓取、摘要和模板渲染无误后再正式发布。
+4. 先执行
+   `deno task article --dry-run`，确认抓取、摘要和模板渲染无误后再正式发布。
 
 ### 想只看模板效果
 

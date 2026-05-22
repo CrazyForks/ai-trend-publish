@@ -19,7 +19,7 @@ deno task doctor
 
 ```bash
 deno task doctor --config ./config/trendpublish.config.ts
-deno task article:dry --config ./config/trendpublish.config.ts
+deno task article --dry-run --config ./config/trendpublish.config.ts
 deno task dev --config ./config/trendpublish.config.ts
 ```
 
@@ -245,7 +245,7 @@ Twitter/X 域名走 Twitter，RSS/RSSHub 走 RSS，其余网页走 FireCrawl。
 运行：
 
 ```bash
-deno task article:dry
+deno task article --dry-run
 ```
 
 ### 3. 正式发布公众号
@@ -337,8 +337,8 @@ storage: {
 
 SQLite 也需要建表，但你不需要手工执行。Local/Docker 首次使用 `SQLiteVectorStore`
 时会自动执行内置建表 SQL。Cloudflare D1 使用
-`migrations/0001_article_workflow_state.sql`，通过 `deno task cf:migrate:remote`
-应用到远端，或通过 `deno task cf:migrate:local` 应用到本地 Wrangler dev 数据库。
+`migrations/0001_article_workflow_state.sql`，通过 `deno task cf migrate`
+应用到远端，或通过 `deno task cf migrate:local` 应用到本地 Wrangler dev 数据库。
 
 ### 7. 开启工作流通知
 
@@ -424,7 +424,7 @@ features: {
 ## 排查建议
 
 - 每次改完 `trendpublish.config.ts` 后先跑 `deno task doctor`。
-- 先跑 `deno task preview`，再跑 `deno task article:dry`，最后再正式发布。
+- 先跑 `deno task preview`，再跑 `deno task article --dry-run`，最后再正式发布。
 - 新环境建议先关闭 `features.article.deduplication.enabled`
   和通知，跑通主链路后再逐项开启。
 - 本地真实的 `trendpublish.config.ts` 已加入 `.gitignore`，不要提交真实密钥。

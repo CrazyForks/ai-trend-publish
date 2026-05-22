@@ -115,13 +115,14 @@ deno task doctor
 deno task preview
 
 # 跑一次微信文章流程，不上传、不发布
-deno task article:dry
+deno task article --dry-run
 
 # 启动服务和定时任务
 deno task dev
 ```
 
-`article:dry` 会把渲染后的 HTML 输出到 `src/temp/`，适合正式发布前检查正文效果。
+`article --dry-run` 会把渲染后的 HTML 输出到
+`src/temp/`，适合正式发布前检查正文效果。
 
 ## 配置原则
 
@@ -288,58 +289,25 @@ features: {
 ## 常用命令
 
 ```bash
-# 配置体检
+# 日常使用
 deno task doctor
-
-# 格式化、lint、类型检查和单元测试
-deno task verify
-
-# 只运行单元测试
-deno task test
-
-# 本地模板预览
+deno task dev
+deno task article --dry-run
+deno task article
 deno task preview
 
-# 微信文章 dry-run
-deno task article:dry
+# 质量检查
+deno task verify
+deno task test
 
-# 正式执行微信文章工作流
-deno task article
+# 本地服务
+deno task dashboard
+deno task docs
 
-# Docker 本地开发构建
-deno task docker:build
-
-# 固定 IP 机器上的微信发布中转服务
-deno task weixin:relay
-
-# 一键安装 relay 为 systemd 保活服务
-deno task relay:install --config ./config/trendpublish.config.ts --port 8080
-
-# 生成 relay 的 systemd 保活服务文件
-deno task relay:systemd
-
-# Cloudflare Worker/Workflow 类型检查
-deno task cf:check
-
-# Cloudflare 打包 dry-run，不真正部署
-deno task cf:dry-run
-
-# Cloudflare 本地 D1 migration + 本地 Worker
-deno task cf:migrate:local
-deno task cf:dev
-
-# Cloudflare 远端 D1 migration + 部署
-deno task cf:migrate:remote
-deno task cf:deploy
-
-# 部署后健康检查和 dry-run 冒烟
-deno task cf:smoke --url https://your-worker.workers.dev --api-key your-api-key
-
-# 编译当前平台二进制
-deno task build
-
-# 编译全部平台
-deno task build:all
+# 部署
+deno task docker
+deno task relay
+deno task cf deploy
 ```
 
 ## 项目结构
@@ -364,7 +332,7 @@ src/
 
 ```bash
 deno task doctor
-deno task article:dry
+deno task article --dry-run
 deno task dev
 ```
 
@@ -377,21 +345,26 @@ docker compose up -d
 
 容器默认读取 `/app/config/trendpublish.config.ts`，通常把本地
 `./config/trendpublish.config.ts` 挂载进去即可。镜像由 GitHub Actions 自动构建，
-不需要在服务器上本地构建。
+不需要在服务器上本地构建。镜像内已经包含 dashboard 构建产物，启动后访问
+`http://localhost:8000/dashboard`。
 
 微信 relay 也是同一个镜像、同一个配置文件名，只是启动命令不同：
 
 ```bash
 cp trendpublish.config.example.ts config/trendpublish.config.ts
-deno task docker:relay:up
+deno task docker relay
 ```
 
 Cloudflare 提供 Worker / Workflows 原生入口，适合远程 HTTP 触发或 Cron
 定时发布。运行状态写入 KV/D1，文章产物和 dry-run HTML 写入 R2 或 KV
 fallback，并可通过 `/dashboard` 查看步骤、错误和产物。部署后可以用
-`deno task cf:smoke` 检查 `/api/health`、创建一次 dry-run
+`deno task cf smoke` 检查 `/api/health`、创建一次 dry-run
 Workflow，并轮询到最终结果。Cloudflare 真实发布 建议调用固定 IP 机器上的
 `weixin-relay`，避免微信 IP 白名单问题。
+
+源码部署时，`deno task dev`、`deno task cf dry-run` 和 `deno task cf deploy`
+都会自动构建 dashboard。Cloudflare 部署会把 dashboard 作为 Workers Static Assets
+发布。
 
 正式发布微信公众号前，需要：
 

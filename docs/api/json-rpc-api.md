@@ -13,6 +13,7 @@
 
 - `GET /dashboard`
 - `GET /api/health`
+- `GET /api/config/summary`
 - `POST /api/runs`
 - `GET /api/runs`
 - `GET /api/runs/:runId`
@@ -41,6 +42,9 @@ curl -H "Authorization: Bearer your-api-key" \
 
 返回值会包含 `config`、`kv`、`d1`、`r2` 等检查项。任一检查失败时 HTTP 状态为
 `500`，方便部署后快速定位是配置、binding 还是存储资源问题。
+
+`GET /api/config/summary` 返回 dashboard 展示用的脱敏配置摘要，只包含模板、
+数据源数量、存储类型和功能开关，不返回任何 provider secret。
 
 触发一次 dry-run：
 

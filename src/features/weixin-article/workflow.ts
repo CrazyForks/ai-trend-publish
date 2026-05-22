@@ -486,6 +486,9 @@ export class WeixinArticleWorkflow {
   private async isDryRun(
     event: WorkflowEvent<WeixinWorkflowParams>,
   ): Promise<boolean> {
+    if (event.payload.forcePublish) {
+      return false;
+    }
     if (event.payload.dryRun) {
       return true;
     }

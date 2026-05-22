@@ -80,7 +80,7 @@ function printHelp() {
 
 用法:
   deno task article
-  deno task article:dry
+  deno task article --dry-run
   deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow --dry-run --max-articles 5
 
 参数:

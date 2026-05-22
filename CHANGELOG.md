@@ -2,6 +2,98 @@
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-05-22
+
+### Dashboard 工程化
+
+- 新增独立 `dashboard/` 前端工程，使用 React、Vite、TypeScript 和 Tailwind CSS
+  构建运行看板，不再使用原来的内联 HTML 作为主实现。
+- Dashboard 固定挂载到 `/dashboard`，本地服务、Docker 镜像和 Cloudflare Worker
+  使用同一套构建产物。
+- 新增 API key 登录页，密钥仅保存在浏览器 `sessionStorage`，后续请求通过
+  `Authorization: Bearer <key>` 调用后端 API。
+- 首页展示运行环境、健康状态、脱敏配置摘要、最近运行和当前存储 / workflow
+  状态，便于快速判断部署是否可用。
+- 运行列表支持状态筛选、手动刷新和自动刷新；运行详情展示步骤时间线、状态、耗时、
+  attempt、错误信息、summary 和产物列表。
+- Artifact 面板支持 HTML、JSON、文本和图片预览，所有产物仍通过认证 API 读取，
+  不直接公开本地目录或 R2 bucket。
+- 触发任务弹窗默认执行 dry-run；真实发布必须勾选确认并发送
+  `forcePublish: true`，降低误发布风险。
+
+### API 与服务端
+
+- 本地服务新增 `GET /api/health`，与 Cloudflare Worker 健康检查接口保持一致。
+- 新增 `GET /api/config/summary`，仅返回脱敏后的运行配置摘要，不暴露 provider
+  secret。
+- 本地服务新增 dashboard 静态资源托管。存在 `dist/dashboard`
+  时直接读取；缺少构建产物时返回提示页。
+- Cloudflare Worker 新增 Workers Static Assets 支持，`/dashboard` 和
+  `/dashboard/*` 直接托管前端资源，`/api/*` 继续走 Worker 后端逻辑。
+- Cloudflare Worker 同步支持 `/api/config/summary`，Dashboard 在本地、Docker 和
+  Cloudflare 下使用一致 API。
+- 微信文章 workflow 识别 `forcePublish`，Dashboard 二次确认后可以覆盖默认
+  dry-run 配置并创建微信公众号草稿。
+
+### 部署体验
+
+- Dockerfile 在镜像构建阶段自动构建 dashboard，GHCR
+  镜像内置控制台，部署后可直接访问 `/dashboard`。
+- `wrangler.jsonc` 增加 Workers Static Assets 绑定，Cloudflare 部署会同时上传
+  dashboard 静态资源。
+- `deno task cf dry-run` 和 `deno task cf deploy` 会自动先构建 dashboard，再执行
+  Wrangler 打包或部署。
+- 文档站构建改为 Deno 直接驱动 VitePress，GitHub Pages workflow 不再依赖
+  Node/npm 安装步骤。
+- 删除 `package.json` 和 `package-lock.json`，项目命令、文档站、Dashboard 和
+  Wrangler 入口统一由 Deno task / npm compatibility 执行。
+- 微信 relay 继续支持源码运行、Docker 运行和 systemd 保活安装；systemd 模板和
+  compose 配置统一使用新的 `deno task relay` 入口。
+
+### 命令行体验
+
+- 新增基于 `@cliffy/command` 的统一任务入口 `scripts/task-runner.ts`。
+- 任务入口由声明式命令树维护，不再手写 if/else 分发。
+- 精简 `deno task` 公共命令，只保留日常入口：`dev`、`doctor`、`verify`、`test`、
+  `article`、`preview`、`relay`、`docker`、`cf`、`build`、`dashboard`、`docs`。
+- 将大量重复别名收敛为参数式子命令：
+  - `deno task article --dry-run`
+  - `deno task docker logs`
+  - `deno task docker relay`
+  - `deno task docker relay logs`
+  - `deno task cf dry-run`
+  - `deno task cf migrate`
+  - `deno task cf deploy`
+  - `deno task relay install`
+  - `deno task relay systemd`
+  - `deno task docs build`
+  - `deno task dashboard build`
+- 暂时保留 `deno task weixin:relay` 作为兼容别名，避免已经安装的旧 systemd
+  服务立即失效。
+
+### 文档
+
+- 重写 README 常用命令和部署说明，突出 Deno-only、Docker、Cloudflare、relay 和
+  dashboard 的推荐入口。
+- 更新 `docs/deployment.md`，补充 Docker 推荐部署和 Cloudflare dashboard
+  静态资源说明。
+- 补充 relay 源码部署、Docker 部署、systemd 保活安装，以及新的参数式命令。
+- 更新快速开始、配置说明、帮助文档和 JSON-RPC API 文档，统一使用
+  `deno task article --dry-run`、`deno task cf deploy` 等新命令。
+- 文档中不再推荐 npm 命令、旧 `article:dry`、旧 `cf:*`、旧 `docker:*` 或旧
+  `relay:*` 任务。
+
+### 验证
+
+- 已通过 `deno task verify`：格式检查、lint、后端类型检查、dashboard 类型检查、
+  dashboard 生产构建和 78 个测试全部通过。
+- 已通过 `deno task doctor`：当前配置 0 个失败，提醒项仅为 Cloudflare
+  绑定、通知渠道、未启用向量去重。
+- 已通过 `deno task docs build`：VitePress 文档站可以正常构建。
+- 已通过 `deno task cf dry-run`：Wrangler 能识别 Worker、Workflow、KV、D1 和
+  Workers Static Assets 绑定。沙箱环境下 Wrangler 写本地日志会出现 EPERM 提示，
+  但 dry-run 打包本身成功。
+
 ## [1.0.9] - 2026-05-21
 
 ### 架构与配置

@@ -2,6 +2,7 @@ import { triggerWorkflow } from "./controllers/workflow.controller.ts";
 import { WorkflowType } from "./controllers/cron.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
+import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
 import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
@@ -135,6 +136,46 @@ function jsonResponse(value: unknown, status = 200): Response {
   });
 }
 
+async function handleHealthRequest(req: Request): Promise<Response> {
+  const unauthorized = await verifyRequestAuth(req);
+  if (unauthorized) return unauthorized;
+
+  const checks: Record<string, { ok: boolean; detail: string }> = {};
+  try {
+    const config = await getAppConfig();
+    checks.config = { ok: true, detail: "trendpublish.config.ts" };
+    checks.storage = {
+      ok: true,
+      detail:
+        `${config.storage.artifacts.provider}/${config.storage.runState.provider}/${config.storage.vector.provider}`,
+    };
+    createLocalArticleRuntimeStores(config);
+    checks.runtimeStores = { ok: true, detail: "local runtime stores ready" };
+  } catch (error) {
+    checks.config = {
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const ok = Object.values(checks).every((check) => check.ok);
+  return jsonResponse({
+    ok,
+    mode: "local",
+    timestamp: new Date().toISOString(),
+    checks,
+  }, ok ? 200 : 500);
+}
+
+async function handleConfigSummaryRequest(req: Request): Promise<Response> {
+  const unauthorized = await verifyRequestAuth(req);
+  if (unauthorized) return unauthorized;
+
+  return jsonResponse(
+    createDashboardConfigSummary(await getAppConfig(), "local"),
+  );
+}
+
 async function handleRunsRequest(req: Request, pathname: string) {
   const unauthorized = await verifyRequestAuth(req);
   if (unauthorized) return unauthorized;
@@ -209,14 +250,91 @@ function toArrayBuffer(value: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
+async function handleDashboardRequest(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const assetPath = dashboardAssetPath(url.pathname);
+  if (!assetPath) {
+    return new Response("Invalid dashboard asset path", { status: 400 });
+  }
+
+  const response = await readDashboardAsset(assetPath);
+  if (response) return response;
+
+  if (assetPath !== "index.html" && !assetPath.startsWith("assets/")) {
+    const indexResponse = await readDashboardAsset("index.html");
+    if (indexResponse) return indexResponse;
+  }
+
+  return new Response(renderDashboardHtml(), {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+function dashboardAssetPath(pathname: string): string | null {
+  const stripped = pathname === "/dashboard"
+    ? "index.html"
+    : pathname.replace(/^\/dashboard\/?/, "") || "index.html";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(stripped);
+  } catch {
+    return null;
+  }
+  if (
+    decoded.startsWith("/") || decoded.includes("..") ||
+    decoded.includes("\\")
+  ) {
+    return null;
+  }
+  return decoded.endsWith("/") ? `${decoded}index.html` : decoded;
+}
+
+async function readDashboardAsset(assetPath: string): Promise<Response | null> {
+  const filePath = `${Deno.cwd()}/dist/dashboard/${assetPath}`;
+  try {
+    const body = await Deno.readFile(filePath);
+    return new Response(body, {
+      headers: {
+        "Content-Type": contentTypeForPath(assetPath),
+        "Cache-Control": assetPath.startsWith("assets/")
+          ? "public, max-age=31536000, immutable"
+          : "no-store",
+      },
+    });
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return null;
+    throw error;
+  }
+}
+
+function contentTypeForPath(path: string): string {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".ico")) return "image/x-icon";
+  return "application/octet-stream";
+}
+
+function isDashboardPath(pathname: string): boolean {
+  return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
 // 请求处理器
 const handler = async (req: Request): Promise<Response> => {
   try {
     const url = new URL(req.url);
-    if (req.method === "GET" && url.pathname === "/dashboard") {
-      return new Response(renderDashboardHtml(), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+    if (req.method === "GET" && isDashboardPath(url.pathname)) {
+      return await handleDashboardRequest(req);
+    }
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      return await handleHealthRequest(req);
+    }
+    if (req.method === "GET" && url.pathname === "/api/config/summary") {
+      return await handleConfigSummaryRequest(req);
     }
     if (url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")) {
       return await handleRunsRequest(req, url.pathname);

@@ -21,8 +21,7 @@ docker pull ghcr.io/liyown/ai-trend-publish:latest
 主服务和微信 relay 使用同一个镜像、同一个配置文件结构，只是启动命令不同：
 
 - 主服务：默认命令，启动 API、Cron 和本地/Docker workflow。
-- 微信 relay：`deno task weixin:relay`，只转发微信公众号 API，适合放在固定 IP
-  机器上。
+- 微信 relay：`deno task relay`，只转发微信公众号 API，适合放在固定 IP 机器上。
 
 启动前准备本地配置和输出目录：
 
@@ -34,8 +33,8 @@ cp trendpublish.config.docker.example.ts config/trendpublish.config.ts
 然后启动：
 
 ```bash
-deno task docker:up
-deno task docker:logs
+deno task docker
+deno task docker logs
 ```
 
 `docker-compose.yml` 默认使用发布镜像，不在服务器上重新构建：
@@ -100,7 +99,7 @@ export default defineConfig((runtime) => ({
 本地和 Docker 都支持显式指定配置路径：
 
 ```bash
-deno task article:dry --config ./config/trendpublish.config.ts
+deno task article --dry-run --config ./config/trendpublish.config.ts
 deno task dev --config ./config/trendpublish.config.ts
 ```
 
@@ -112,7 +111,7 @@ deno task dev --config ./config/trendpublish.config.ts
 本地构建只建议用于开发验证：
 
 ```bash
-deno task docker:build
+deno task docker build
 ```
 
 正式部署推荐使用 GHCR 发布镜像，这样服务器不需要安装 Deno
@@ -247,7 +246,7 @@ deno run -A npm:wrangler secret put WEIXIN_RELAY_TOKEN
 secrets。脚本只打印变量名， 不会输出变量值：
 
 ```bash
-deno task cf:sync-secrets --env-file cloudflare-token.local
+deno task cf sync-secrets --env-file cloudflare-token.local
 ```
 
 本地 Wrangler dev 可以复制 `.dev.vars.example`：
@@ -260,18 +259,21 @@ cp .dev.vars.example .dev.vars
 
 ## Cloudflare 验证流程
 
-先做类型检查和 Worker 打包 dry-run：
+先做 Worker 打包 dry-run：
 
 ```bash
-deno task cf:check
-deno task cf:dry-run
+deno task cf dry-run
 ```
+
+`cf dry-run` 会先构建 dashboard，然后使用 Wrangler 打包 Worker 和 Workers Static
+Assets。Cloudflare 上的 `/dashboard` 不再由 Worker 拼接 HTML
+字符串，而是直接服务 `dist/dashboard` 里的前端资源。
 
 初始化本地 D1，并启动本地 Worker：
 
 ```bash
-deno task cf:migrate:local
-deno task cf:dev
+deno task cf migrate:local
+deno task cf dev
 ```
 
 打开看板：
@@ -290,20 +292,20 @@ curl -H "Authorization: Bearer <SERVER_API_KEY>" \
 远端部署前先应用 D1 migration：
 
 ```bash
-deno task cf:migrate:remote
+deno task cf migrate
 ```
 
 然后部署：
 
 ```bash
-deno task cf:deploy
+deno task cf deploy
 ```
 
 部署完成后做一次远端冒烟测试。这个脚本会调用 `/api/health`，创建一次
 `dryRun: true` 的 Workflow，然后轮询运行状态直到成功或失败：
 
 ```bash
-deno task cf:smoke --url https://<your-worker>.<your-subdomain>.workers.dev \
+deno task cf smoke --url https://<your-worker>.<your-subdomain>.workers.dev \
   --api-key <SERVER_API_KEY>
 ```
 
@@ -311,6 +313,7 @@ HTTP 触发路径：
 
 ```text
 GET  /api/health
+GET  /api/config/summary
 POST /api/runs
 GET  /api/runs
 GET  /api/runs/:runId
@@ -321,6 +324,7 @@ GET  /dashboard
 `POST /api/workflow` 仍保留为旧 JSON-RPC 兼容入口。新的看板和 REST API
 使用同一个 `server.apiKey` 做 Bearer 鉴权。Cloudflare 环境支持
 `dryRun: true`，dry-run HTML 会写入 R2，并可在 `/dashboard` 中打开。
+看板触发真实发布时会要求二次确认；当前真实发布语义是创建微信公众号草稿。
 
 ## 微信发布 Relay
 
@@ -355,15 +359,15 @@ relay 专用配置文件。
 启动 relay：
 
 ```bash
-deno task docker:relay:up
-deno task docker:relay:logs
+deno task docker relay
+deno task docker relay logs
 ```
 
 relay 使用的仍然是同一个发布镜像：
 
 ```yaml
 image: ghcr.io/liyown/ai-trend-publish:latest
-command: ["deno", "task", "weixin:relay"]
+command: ["deno", "task", "relay"]
 volumes:
   - ./config/trendpublish.config.ts:/app/config/trendpublish.config.ts:ro
 ```
@@ -396,13 +400,13 @@ import { defineConfig } from "@src/utils/config/define-config.ts";
 ```
 
 ```bash
-PORT=8080 deno task weixin:relay --config ./config/trendpublish.config.ts
+PORT=8080 deno task relay --config ./config/trendpublish.config.ts
 ```
 
 前台模式适合临时验证。生产环境建议用 systemd 保活：
 
 ```bash
-deno task relay:install \
+deno task relay install \
   --config ./config/trendpublish.config.ts \
   --port 8080
 ```
@@ -413,7 +417,7 @@ deno task relay:install \
 如果源码目录、配置路径或运行用户需要显式指定：
 
 ```bash
-deno task relay:install \
+deno task relay install \
   --workdir /opt/ai-trend-publish \
   --config /opt/ai-trend-publish/config/trendpublish.config.ts \
   --user trendpublish \
@@ -423,7 +427,7 @@ deno task relay:install \
 只想生成 service 文件，也可以使用：
 
 ```bash
-deno task relay:systemd \
+deno task relay systemd \
   --workdir /opt/ai-trend-publish \
   --config /opt/ai-trend-publish/config/trendpublish.config.ts \
   --user trendpublish \
@@ -481,7 +485,7 @@ deno run -A npm:wrangler secret put WEIXIN_RELAY_TOKEN      # 填 relay token
 设置后重新部署 Cloudflare：
 
 ```bash
-deno task cf:deploy
+deno task cf deploy
 ```
 
 ## 发布前检查
@@ -491,7 +495,7 @@ deno task cf:deploy
 ```bash
 deno task verify
 deno task doctor --config ./config/trendpublish.config.ts
-deno task article:dry --config ./config/trendpublish.config.ts
+deno task article --dry-run --config ./config/trendpublish.config.ts
 ```
 
 正式发布前确认：

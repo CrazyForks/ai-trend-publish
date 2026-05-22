@@ -12,6 +12,7 @@ import {
 import cloudflareConfig from "../../../trendpublish.config.cloudflare.ts";
 import {
   createConfigRuntime,
+  getAppConfig,
   initializeAppConfig,
 } from "@src/utils/config/app-config.ts";
 import { createWeixinArticleDependencies } from "@src/app/weixin-article/create-weixin-article-dependencies.ts";
@@ -20,6 +21,7 @@ import { KvArtifactStore } from "@src/platform/cloudflare/kv-artifact-store.ts";
 import { KvD1RunStateStore } from "@src/platform/cloudflare/kv-d1-run-state-store.ts";
 import { D1VectorStore } from "@src/platform/cloudflare/d1-vector-store.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
+import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
 import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
 import type {
   CloudflareD1Database,
@@ -40,12 +42,17 @@ interface WorkflowBinding<TInput> {
   create(options?: { id?: string; params?: TInput }): Promise<unknown>;
 }
 
+interface AssetsBinding {
+  fetch(request: Request): Promise<Response>;
+}
+
 interface CloudflareEnv {
   [key: string]: unknown;
   WEIXIN_ARTICLE_WORKFLOW: WorkflowBinding<WeixinArticleWorkflowInput>;
   ARTICLE_ARTIFACTS?: CloudflareR2Bucket;
   ARTICLE_RUNS: CloudflareKvNamespace;
   ARTICLE_DB: CloudflareD1Database;
+  ASSETS?: AssetsBinding;
 }
 
 interface CloudflareWorkflowEvent<TInput> {
@@ -293,6 +300,22 @@ async function handleHealthRequest(
   }, { status: ok ? 200 : 500 });
 }
 
+async function handleConfigSummaryRequest(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response> {
+  const unauthorized = await verifyCloudflareAuth(request, env);
+  if (unauthorized) return unauthorized;
+
+  await initializeCloudflareConfig(env);
+  return Response.json(
+    createDashboardConfigSummary(
+      await getAppConfig(),
+      "cloudflare-workflow",
+    ),
+  );
+}
+
 async function handleRunsRequest(
   request: Request,
   env: CloudflareEnv,
@@ -377,16 +400,61 @@ function toArrayBuffer(value: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
+async function handleDashboardRequest(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response> {
+  if (!env.ASSETS) {
+    return new Response(renderDashboardHtml(), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
+  const assetRequest = rewriteDashboardAssetRequest(request);
+  const response = await env.ASSETS.fetch(assetRequest);
+  if (response.status !== 404) return response;
+
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/dashboard/assets/")) {
+    const indexRequest = rewriteDashboardAssetRequest(request, "/index.html");
+    return await env.ASSETS.fetch(indexRequest);
+  }
+  return response;
+}
+
+function rewriteDashboardAssetRequest(
+  request: Request,
+  forcedPath?: string,
+): Request {
+  const url = new URL(request.url);
+  if (forcedPath) {
+    url.pathname = forcedPath;
+  } else if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
+    url.pathname = "/index.html";
+  } else {
+    url.pathname = url.pathname.replace(/^\/dashboard/, "") || "/index.html";
+  }
+  return new Request(url.toString(), {
+    headers: request.headers,
+    method: request.method,
+  });
+}
+
+function isDashboardPath(pathname: string): boolean {
+  return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
 export default {
   async fetch(request: Request, env: CloudflareEnv): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname === "/dashboard") {
-      return new Response(renderDashboardHtml(), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+    if (request.method === "GET" && isDashboardPath(url.pathname)) {
+      return await handleDashboardRequest(request, env);
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
       return await handleHealthRequest(request, env);
+    }
+    if (request.method === "GET" && url.pathname === "/api/config/summary") {
+      return await handleConfigSummaryRequest(request, env);
     }
     if (
       url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")

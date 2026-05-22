@@ -25,7 +25,7 @@ if (installOptions.dryRun) {
 }
 
 if (Deno.build.os !== "linux") {
-  throw new Error("relay:install 只支持 Linux systemd 环境");
+  throw new Error("relay install 只支持 Linux systemd 环境");
 }
 
 await writeServiceFile(serviceFile, unit);

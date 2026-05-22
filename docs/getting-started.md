@@ -70,12 +70,14 @@ deno task dev
 deno task preview
 
 # dry-run 跑一次微信文章流程，不真正发布
-deno task article:dry
+deno task article --dry-run
 ```
 
 默认会启动在 `http://localhost:8000`，并提供：
 
 - `GET /dashboard`：运行看板。
+- `GET /api/health`：本地服务健康检查。
+- `GET /api/config/summary`：dashboard 使用的脱敏配置摘要。
 - `POST /api/runs`：触发微信文章工作流。
 - `POST /api/workflow`：旧 JSON-RPC 兼容入口。
 
@@ -90,7 +92,8 @@ docker compose up -d
 ```
 
 Docker 会读取 `./config/trendpublish.config.ts`，dry-run 输出、运行状态和
-artifact 会写到 `./data/temp`，可通过 `/dashboard` 查看。更多部署细节见
+artifact 会写到 `./data/temp`，可通过 `/dashboard` 查看。发布镜像已经内置
+dashboard 构建产物，不需要在服务器上运行前端构建。更多部署细节见
 [部署文档](/deployment)。
 
 ## 6. 触发一次工作流
@@ -113,22 +116,12 @@ curl -X POST http://localhost:8000/api/workflow \
 ## 7. 文档开发（VitePress）
 
 ```bash
-npm install
-npm run docs:dev
-npm run docs:build
+deno task docs
+deno task docs build
 ```
 
-## 8. 常用构建命令
+## 8. 构建当前平台二进制
 
 ```bash
-# Windows
-deno task build:windows
-
-# macOS
-deno task build:mac-x64
-deno task build:mac-arm64
-
-# Linux
-deno task build:linux-x64
-deno task build:linux-arm64
+deno task build
 ```
