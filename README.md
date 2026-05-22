@@ -1,98 +1,57 @@
 # TrendPublish
 
-基于 Deno
-开发的趋势发现和内容发布系统，支持多源数据采集、智能总结和自动发布到微信公众号。
+TrendPublish 是一个基于 Deno 和 TypeScript
+的微信文章自动发布系统。它可以抓取网页、RSS、Twitter/X
+等数据源，使用大模型完成内容排序、摘要、标题、排版和配图，最后生成并发布到微信公众号。
+
+项目当前聚焦一条主链路：**微信文章发布**。配置集中在
+`trendpublish.config.ts`，可以用 TypeScript
+类型提示组织模型、抓取源、模板、图片、去重和通知能力。
 
 ![star](https://atomgit.com/liyown/ai-trend-publish/star/badge.svg)
 
-> 🌰 示例公众号：**AISPACE科技空间**
+示例公众号：**AISPACE科技空间**
 
-点击加入discard频道：https://discord.gg/mrZvBHNawS 点击加入 QQ
-群聊：<a href="https://qun.qq.com/universal-share/share?ac=1&authKey=E68gaXeajH49WXeIiawSS2Smr6uaSYe5zG9VDAEZa6sJgnNTcZd5X7r%2Fi3G6qVOa&busi_data=eyJncm91cENvZGUiOiI3Mzc5MDI3MzEiLCJ0b2tlbiI6Ijd2ZWN6THd6VFQ1TkNvYVJwQVpIbEtRSlM2UTJnYWhlMGxVMWhGUlNKMkV3MytoQWl6bUdNRGl3QjE0bklJMTUiLCJ1aW4iOiIxNTM2NzI3OTI1In0%3D&data=x1m4pt9JPKytsxKlmRh7duo4bnkRCLdhOFY_BhQenSr2dav7_0PoNpJc2sMzZdj3sKt9EPMR_AD9hlwI78HKUA&svctype=4&tempid=h5_group_info" target="_blank" rel="noopener noreferrer">
-点击链接加入群聊【TrendPublish-1】
-</a>
+社区交流：
 
-> 即刻关注，体验 AI 智能创作的内容～
+- Discord: https://discord.gg/mrZvBHNawS
+- QQ 群：
+  <a href="https://qun.qq.com/universal-share/share?ac=1&authKey=E68gaXeajH49WXeIiawSS2Smr6uaSYe5zG9VDAEZa6sJgnNTcZd5X7r%2Fi3G6qVOa&busi_data=eyJncm91cENvZGUiOiI3Mzc5MDI3MzEiLCJ0b2tlbiI6Ijd2ZWN6THd6VFQ1TkNvYVJwQVpIbEtRSlM2UTJnYWhlMGxVMWhGUlNKMkV3MytoQWl6bUdNRGl3QjE0bklJMTUiLCJ1aW4iOiIxNTM2NzI3OTI1In0%3D&data=x1m4pt9JPKytsxKlmRh7duo4bnkRCLdhOFY_BhQenSr2dav7_0PoNpJc2sMzZdj3sKt9EPMR_AD9hlwI78HKUA&svctype=4&tempid=h5_group_info" target="_blank" rel="noopener noreferrer">TrendPublish-1</a>
 
-## 🛠 开发环境
+## 核心能力
 
-- **运行环境**: [Deno](https://deno.land/) v2.0.0 或更高版本
-- **开发语言**: TypeScript
-- **操作系统**: Windows/Linux/MacOS
+- 多源抓取：支持普通 URL、RSS/RSSHub、FireCrawl、Jina Reader / DeepSearch、
+  Twitter/X 与 Xquik。
+- AI 内容处理：支持 OpenAI Chat Completions
+  兼容接口，用于排序、摘要、润色、标题和动态模板生成。
+- 微信文章渲染：内置多套公众号模板，支持 `dynamic` 动态模板和 `minimal`
+  等静态模板。
+- 智能配图：支持阿里云百炼 / DashScope 通义万相生成封面图和可选正文配图。
+- 服务覆盖：大模型、数据源获取、图片生成、发布、通知和存储都按能力拆分，
+  现在能直接使用，后续也方便继续补充。
+- 发布与调试：支持微信公众号草稿/发布接口，也支持 dry-run 输出本地 HTML。
+- 可选增强：支持 MySQL 向量去重，以及 Bark、钉钉、飞书工作流通知。
 
-## 🔌 外部服务兼容
+## 适合场景
 
-TrendPublish 默认围绕“一套 LLM + 微信公众号发布”工作，其他能力按需开启。
-项目只从 `trendpublish.config.ts` 读取运行配置；运行 `deno task doctor`
-可以按已开启功能检查缺失项。
+- 每天自动整理技术、产品、商业或研究资讯，并发布到微信公众号。
+- 使用固定数据源生成 AI 资讯简报。
+- 用可控模板生成公众号正文，减少手动排版成本。
+- 需要先本地预览、dry-run 验证，再正式发布的内容工作流。
 
-| 功能        | 支持服务 / 接口                                 | 用途                                   | 配置位置                                                                | 什么时候必需            |
-| ----------- | ----------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- | ----------------------- |
-| LLM         | OpenAI Chat Completions 兼容接口                | 内容排序、摘要润色、标题、动态微信模板 | `providers.ai.*`                                                        | 必需                    |
-| LLM         | OpenAI、DeepSeek、通义千问 DashScope 兼容模式等 | 通过统一 `providers.ai` 接入           | 同上                                                                    | 任选一个                |
-| 提示词风格  | technology / business / product 等              | 控制选题、摘要、标题、排版和配图口径   | `features.article.renderer.promptProfile`                               | 可选                    |
-| 微信发布    | 微信公众号草稿 / 发布接口                       | 上传封面、上传正文图片、创建文章       | `providers.publish.weixin.*`                                            | 正式发布必需            |
-| 生图        | 阿里云百炼 / DashScope 通义万相                 | 生成公众号封面图                       | `providers.image.dashscope.apiKey`                                      | 可选，失败会走兜底图    |
-| 正文配图    | 阿里云百炼 / DashScope 通义万相                 | 按文章内容生成正文配图                 | `features.article.bodyImages`                                           | 开启正文 AI 配图时需要  |
-| 数据源      | URL 列表 + 抓取分组前缀                         | 配置文章从哪里抓                       | `features.article.sources`                                              | 文章工作流必需          |
-| 抓取        | FireCrawl                                       | 网页内容抓取                           | `providers.fetch.firecrawl.apiKey`                                      | URL 走 FireCrawl 时必需 |
-| 抓取        | Twitter/X API                                   | X/Twitter 内容抓取                     | `providers.fetch.twitter.bearerToken`                                   | X/Twitter 抓取二选一    |
-| 抓取        | Xquik                                           | Twitter/X 备用抓取源                   | `providers.fetch.twitter.xquikApiKey`                                   | X/Twitter 抓取二选一    |
-| 抓取 / 检索 | Jina Reader、Jina DeepSearch                    | URL 阅读、深度搜索                     | `providers.fetch.jina.apiKey`                                           | 分组使用 Jina 时必需    |
-| 抓取        | RSS / RSSHub                                    | RSS 数据源抓取                         | `providers.fetch.rss`                                                   | RSS URL 可直接使用      |
-| Embedding   | DashScope OpenAI-compatible Embedding           | 文章向量去重                           | `features.article.deduplication` + `providers.vector.embedding.*`       | 开启去重时需要          |
-| 通知        | Bark                                            | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.bark`     | 可选                    |
-| 通知        | 钉钉机器人                                      | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.dingtalk` | 可选                    |
-| 通知        | 飞书机器人                                      | 工作流状态通知                         | `features.article.notifications.channels` + `providers.notify.feishu`   | 可选                    |
-| 存储        | MySQL                                           | 保存向量去重等业务数据                 | `storage.mysql.*`                                                       | 可选                    |
+## 快速开始
 
-最小可运行配置只需要：
+### 1. 安装运行环境
 
-```ts
-import { defineConfig } from "./src/utils/config/define-config.ts";
+需要 Deno v2.0.0 或更高版本。
 
-export default defineConfig({
-  server: { apiKey: "your-api-key" },
-  providers: {
-    ai: {
-      baseUrl: "https://api.deepseek.com/v1",
-      apiKey: "your-api-key",
-      model: "deepseek-chat",
-    },
-  },
-});
-```
-
-常见组合：
-
-- 只本地预览模板：配置 `providers.ai.*` 后运行 `deno task preview`。
-- 跑微信文章 dry-run：配置 `providers.ai.*`、`features.article.sources` 和对应的
-  `providers.fetch.*`。
-- 正式发布公众号：额外配置 `providers.publish.weixin.appId`、
-  `providers.publish.weixin.appSecret`，并确认公众号 IP 白名单。
-- 生成封面图：配置
-  `providers.image.dashscope.apiKey`，未配置或生成失败时会使用默认兜底封面。
-- 生成正文配图：设置 `features.article.bodyImages.mode` 为 `missing` 或
-  `all`，并配置 `providers.image.dashscope.apiKey`。
-- 开启文章去重：设置 `features.article.deduplication.enabled=true`，并配置
-  DashScope Embedding 和 MySQL。
-- 开启通知：在 `features.article.notifications.channels` 中加入
-  `bark`、`dingtalk` 或 `feishu`，并配置对应 `providers.notify.*` 凭证。
-
-## 🚀 快速开始
-
-感谢 https://github.com/233cy 提供的入门教程
-https://mp.weixin.qq.com/s/cpfNsezIA3OOvxHLdcdmkg
-
-### 1. 安装 Deno
-
-Windows (PowerShell):
+Windows:
 
 ```powershell
 irm https://deno.land/install.ps1 | iex
 ```
 
-MacOS/Linux:
+macOS / Linux:
 
 ```bash
 curl -fsSL https://deno.land/install.sh | sh
@@ -105,362 +64,338 @@ git clone https://github.com/liyown/ai-trend-publish
 cd ai-trend-publish
 ```
 
-### 3. 配置项目
+### 3. 创建配置
 
 ```bash
 cp trendpublish.config.example.ts trendpublish.config.ts
-# 编辑 trendpublish.config.ts
+deno task doctor
 ```
 
-### 4. 开发和运行
+最小配置只需要服务密钥和一套大模型配置：
+
+```ts
+import { defineConfig } from "./src/utils/config/define-config.ts";
+
+export default defineConfig({
+  server: {
+    apiKey: "your-api-key",
+  },
+  providers: {
+    ai: {
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "your-ai-api-key",
+      model: "deepseek-chat",
+    },
+  },
+  features: {
+    article: {
+      dryRun: true,
+      renderer: {
+        template: "minimal",
+        promptProfile: "technology",
+      },
+      sources: [
+        "https://news.ycombinator.com/",
+      ],
+    },
+  },
+});
+```
+
+更多配置见 [配置说明](docs/configuration.md)。
+
+### 4. 本地验证
 
 ```bash
-# 检查配置
+# 检查配置和必填项
 deno task doctor
 
-# 启动服务
+# 预览全部微信模板
+deno task preview
+
+# 跑一次微信文章流程，不上传、不发布
+deno task article:dry
+
+# 启动服务和定时任务
 deno task dev
-
-# 预览微信模板
-deno task preview
-
-# dry-run 跑一次微信文章流程，不真正发布
-deno task article:dry
-
-# 运行测试
-deno task test
-
-# 完整开发校验
-deno task verify
-
-# 编译Windows版本
-deno task build:windows
-
-# 编译Mac版本
-deno task build:mac-x64    # Intel芯片
-deno task build:mac-arm64  # M系列芯片
-
-# 编译Linux版本
-deno task build:linux-x64   # x64架构
-deno task build:linux-arm64 # ARM架构
-
-# 编译所有平台
-deno task build:all
 ```
 
-### 5. 文档开发（VitePress）
+`article:dry` 会把渲染后的 HTML 输出到 `src/temp/`，适合正式发布前检查正文效果。
 
-```bash
-# 安装文档依赖
-npm install
+## 配置原则
 
-# 本地预览文档
-npm run docs:dev
+TrendPublish 的配置分成两层：
 
-# 构建文档
-npm run docs:build
+- `providers`：只放外部服务凭证和默认能力参数。
+- `features.article`：决定微信文章工作流开启哪些功能、选择哪个
+  provider、使用什么参数。
+
+例如，开启正文 AI 配图时：
+
+```ts
+providers: {
+  image: {
+    dashscope: { apiKey: "your-dashscope-api-key" },
+  },
+},
+features: {
+  article: {
+    bodyImages: {
+      mode: "missing",
+      provider: "dashscope",
+      count: 1,
+      size: "1024*1024",
+    },
+  },
+},
 ```
 
-## 🌟 主要功能
+这样可以避免“凭证配置”和“功能开关”混在一起。
 
-- 🤖 多源数据采集
+## 常用功能开关
 
-  - Twitter/X 内容抓取
-  - Xquik 可作为 Twitter/X 抓取备用来源
-  - 网站内容抓取 (基于 FireCrawl)
-  - Jina Reader / DeepSearch 抓取和搜索
-  - 支持自定义数据源配置
+| 目标           | 配置位置                                  | 说明                                                                         |
+| -------------- | ----------------------------------------- | ---------------------------------------------------------------------------- |
+| 选择文章模板   | `features.article.renderer.template`      | 支持 `minimal`、`longform`、`product`、`dynamic` 等                          |
+| 选择提示词风格 | `features.article.renderer.promptProfile` | 支持 `technology`、`business`、`product`、`developer`、`research`、`general` |
+| 配置数据源     | `features.article.sources`                | 直接写 URL，也可以用 `group:url` 指定抓取分组                                |
+| 配置抓取策略   | `fetchGroups`                             | 分组内 provider 按顺序 fallback                                              |
+| 开启封面生图   | `features.article.cover`                  | 需要 `providers.image.dashscope.apiKey`                                      |
+| 开启正文配图   | `features.article.bodyImages`             | 失败时回退已有原文图片布局                                                   |
+| 开启向量去重   | `features.article.deduplication`          | 需要 embedding provider 和 MySQL                                             |
+| 开启通知       | `features.article.notifications.channels` | 支持 Bark、钉钉、飞书                                                        |
+| 正式发布微信   | `features.article.dryRun: false`          | 需要微信公众号配置和 IP 白名单                                               |
 
-- 🧠 AI 智能处理
+完整字段说明见 [配置说明](docs/configuration.md)。
 
-  - 支持 OpenAI Chat Completions 兼容模型，如 OpenAI、DeepSeek、通义千问等
-  - 关键信息提取
-  - 智能标题生成
-  - 支持 DashScope / Jina Embedding 和 Jina Rerank
+## 数据源写法
 
-- 📢 自动发布
+最简单的写法是直接放 URL：
 
-  - 微信公众号文章发布
-  - 自定义文章模板
-  - 阿里云百炼 / DashScope 通义万相封面图生成
-  - 定时发布任务
-
-- 📱 通知系统
-  - Bark 通知集成
-- 钉钉通知集成
-- 飞书通知集成
-  - 任务执行状态通知
-  - 错误告警
-
-## 📝 文章模板
-
-TrendPublish 提供了多种微信公众号文章模板，可通过
-`features.article.renderer.template`
-选择：`default`、`modern`、`tech`、`mianpro`、
-`longform`、`product`、`minimal`、`darktech`、`dynamic` 或 `random`。查看
-[模板展示页面](https://liyown.github.io/ai-trend-publish/templates)
-了解更多详情。
-
-`dynamic` 会在发布时调用 AI 根据本次文章内容实时生成完整的公众号内联 HTML，
-并在生成失败时自动回退到 `minimal`。
-
-常用调试命令：
-
-```bash
-deno task preview
-deno task article:dry
+```ts
+features: {
+  article: {
+    sources: [
+      "https://news.ycombinator.com/",
+      "https://openai.com/news/",
+    ],
+  },
+},
+fetchGroups: {
+  default: ["auto"],
+},
 ```
 
-`article:dry` 会跳过微信公众号 IP 白名单检查、封面上传、正文图片上传和正式发布，
-并把渲染后的 HTML 输出到 `src/temp/dry_run_weixin_article_*.html`。
+需要指定抓取策略时，可以使用自定义分组前缀：
 
-## DONE
-
-- [x] 微信公众号文章发布
-- [x] 大模型每周排行榜
-- [x] 热门AI相关仓库推荐
-- [x] 添加通义千问（Qwen）支持
-- [x] 使用统一 `providers.ai` 配置全局模型
-- [x] 新增配置体检、微信模板预览和文章 dry-run 命令
-
-## Todo
-
-- [ ] 热门AI相关论文推荐
-- [ ] 热门AI相关工具推荐
-- [ ] FireCrawl 自动注册免费续期
-
-## 优化项
-
-- [ ] 内容插入相关图片
-- [x] 内容去重
-- [ ] 降低AI率
-- [ ] 文章图片优化
-- [ ] ...
-
-## 进阶
-
-- [ ] 提供exe可视化界面
-
-## 🛠 技术栈
-
-- **运行环境**: Deno + TypeScript
-- **AI 服务**: OpenAI Chat Completions
-  兼容模型、DeepSeek、通义千问、通义万相、Jina AI (see
-  [Integration Guide](docs/integrations/jina-integration-guide.md))
-- **数据源**:
-  - Twitter/X API
-  - FireCrawl
-  - Jina AI (for scraping and search, see
-    [Integration Guide](docs/integrations/jina-integration-guide.md))
-- **模板引擎**: EJS
-- **开发工具**:
-  - Deno
-  - TypeScript
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Deno (v2+)
-- TypeScript
-
-### 安装
-
-1. 克隆项目
-
-```bash
-git clone https://github.com/liyown/ai-trend-publish
+```ts
+providers: {
+  fetch: {
+    firecrawl: { apiKey: "your-firecrawl-api-key" },
+    jina: { apiKey: "your-jina-api-key" },
+    twitter: { xquikApiKey: "your-xquik-api-key" },
+  },
+},
+fetchGroups: {
+  default: ["auto"],
+  web: ["firecrawl", "jina"],
+  social: ["twitter"],
+},
+features: {
+  article: {
+    sources: [
+      "web:https://openai.com/news/",
+      "social:https://x.com/OpenAIDevs",
+    ],
+  },
+},
 ```
 
-2. 配置项目
+`web:` 和 `social:` 不是固定 provider 名，而是你自己定义的抓取分组名。
 
-```bash
-cp trendpublish.config.example.ts trendpublish.config.ts
-# 先填最小配置，再按需开启抓取、发布、生图、去重和通知
-deno task doctor
-```
+## 支持的服务
 
-## ⚙️ 配置文件
+当前版本建议先用一套稳定的大模型配置跑通主链路，再按需开启抓取增强、图片生成、
+去重和通知。
 
-在 `trendpublish.config.ts` 中配置必要参数。完整说明见
-[配置说明](docs/configuration.md)，Jina 相关能力见
-[Jina Integration Guide](docs/integrations/jina-integration-guide.md)。
+### AI 大模型
 
-## ⚠️ 配置IP白名单
+- OpenAI：[申请地址](https://platform.openai.com/api-keys)； `baseUrl` 填
+  `https://api.openai.com/v1`；`model` 按平台模型列表选择。
+- DeepSeek：[申请地址](https://platform.deepseek.com/api_keys)； `baseUrl` 填
+  `https://api.deepseek.com/v1`；常用模型为 `deepseek-chat`、
+  `deepseek-reasoner`。
+- 通义千问 / DashScope：[申请地址](https://bailian.console.aliyun.com/)；\
+  `baseUrl` 填 `https://dashscope.aliyuncs.com/compatible-mode/v1`；常用模型为\
+  `qwen-plus`、`qwen-max`。
 
-在使用微信公众号相关功能前,请先将本机IP添加到公众号后台的IP白名单中。
+### 数据源获取
 
-### 操作步骤
+- 普通网页 URL：直接写到 `features.article.sources`。
+- RSS / RSSHub：直接写 RSS URL；RSSHub 可配置 `providers.fetch.rss.baseUrl`。
+- FireCrawl：[申请地址](https://firecrawl.dev/)；配置
+  `providers.fetch.firecrawl.apiKey`。
+- Jina Reader / DeepSearch：[申请地址](https://jina.ai/reader/)；配置
+  `providers.fetch.jina.apiKey`。
+- Twitter/X：[申请地址](https://developer.x.com/)；配置
+  `providers.fetch.twitter.bearerToken`。
+- Xquik：[申请地址](https://xquik.com/en/api-keys)；配置
+  `providers.fetch.twitter.xquikApiKey`。
+- 后续：GitHub、Hacker News、Product Hunt、YouTube、搜索引擎结果源。
 
-1. 查看本机IP: [IP查询工具](https://tool.lu/ip/)
-2. 登录微信公众号后台,添加IP白名单
+### 图片生成
 
-### 图文指南
+- 阿里云百炼 / DashScope
+  通义万相：[申请地址](https://bailian.console.aliyun.com/)； 配置
+  `providers.image.dashscope.apiKey`。
+- 封面图默认模型：`wanx-poster-generation-v1`。
+- 正文配图通过 `features.article.bodyImages` 开启，可设置生成数量和尺寸。
+- 后续：OpenAI Images、Gemini / Imagen、Replicate、Stability、ComfyUI。
 
-<div align="center">
-  <img src="https://oss.liuyaowen.cn/images/202503051122480.png" width="200" style="margin-right: 20px"/>
-  <img src="https://oss.liuyaowen.cn/images/202503051122263.png" width="400" />
-</div>
+### 发布与素材
 
-4. 启动项目
+- 微信公众号：[申请地址](https://mp.weixin.qq.com/)；配置
+  `providers.publish.weixin.appId` 和 `providers.publish.weixin.appSecret`。
+- 当前支持：封面上传、正文图片上传、草稿创建和发布。
+- 正式发布前需要在公众号后台配置 IP 白名单。
+- 后续：Twitter/X thread、Telegram、飞书文档、Notion、静态站点、Webhook。
+
+### 去重、存储和通知
+
+- 向量去重：DashScope Embedding；常用模型为 `text-embedding-v3`。
+- 存储：当前使用 MySQL，配置 `storage.mysql`。
+- 通知：当前支持 Bark、钉钉机器人、飞书机器人。
+- 后续：OpenAI / Jina / BGE Embedding、PostgreSQL、SQLite、Cloudflare D1 /\
+  KV / R2、企业微信、Telegram、Slack、Discord、邮件通知。
+
+## 微信模板
+
+模板通过 `features.article.renderer.template` 选择：
+
+- `minimal`：极简阅读风，适合稳定日更。
+- `longform`：长文杂志风，适合深度整理。
+- `product`：产品更新风，适合产品、工具、版本动态。
+- `darktech`：深色研究笔记风。
+- `dynamic`：AI 根据本次文章内容实时生成公众号正文 HTML，失败时自动回退
+  `minimal`。
+
+也可以使用 `default`、`modern`、`tech`、`mianpro`、`random`。模板展示见
+[模板文档](docs/templates.md) 或
+[在线展示](https://liyown.github.io/ai-trend-publish/templates)。
+
+## 常用命令
 
 ```bash
 # 配置体检
 deno task doctor
 
-# 运行
-deno task dev
+# 格式化、lint、类型检查和单元测试
+deno task verify
 
-详细运行时间见 src\controllers\cron.ts
-```
+# 只运行单元测试
+deno task test
 
-## 📦 部署指南
+# 本地模板预览
+deno task preview
 
-### 方式一：直接部署
-
-1. 在服务器上安装 Deno
-
-Windows:
-
-```powershell
-irm https://deno.land/install.ps1 | iex
-```
-
-Linux/MacOS:
-
-```bash
-curl -fsSL https://deno.land/install.sh | sh
-```
-
-2. 克隆项目
-
-```bash
-git clone https://github.com/liyown/ai-trend-publish.git
-cd ai-trend-publish
-```
-
-3. 配置项目
-
-```bash
-cp trendpublish.config.example.ts trendpublish.config.ts
-# 编辑 trendpublish.config.ts
-```
-
-4. 启动服务
-
-```bash
-# 开发模式（支持热重载）
-deno task dev
-
-# dry-run 验证微信文章流程
+# 微信文章 dry-run
 deno task article:dry
 
-# 使用PM2进行进程管理（推荐）
-npm install -g pm2
-pm2 start --interpreter="deno" --interpreter-args="run --allow-all" src/index.ts
+# 正式执行微信文章工作流
+deno task article
+
+# 编译当前平台二进制
+deno task build
+
+# 编译全部平台
+deno task build:all
 ```
 
-5. 设置开机自启（可选）
+## 项目结构
+
+```text
+src/
+  app/weixin-article/          # 应用组装层：创建 provider、规划抓取、定义 workflow
+  features/weixin-article/     # 微信文章业务模型、服务、渲染和 workflow
+  integrations/                # 外部服务 adapter：LLM、fetch、image、publish、notify、vector
+  core/                        # workflow runtime、ports 和通用基础能力
+  modules/                     # 内容排序、摘要、Markdown 转换等内部可复用能力
+  platform/cloudflare/         # Cloudflare 可选部署入口
+  utils/config/                # TypeScript 配置定义、解析与校验
+```
+
+架构细节见 [架构总览](docs/architecture.md)。
+
+## 发布与部署
+
+本地或服务器部署的推荐路径：
 
 ```bash
-# 使用PM2设置开机自启
-pm2 startup
-pm2 save
+deno task doctor
+deno task article:dry
+deno task dev
 ```
 
-### 方式二：Docker 部署
+正式发布微信公众号前，需要：
 
-1. 拉取代码
+1. 配置 `providers.publish.weixin.appId` 和
+   `providers.publish.weixin.appSecret`。
+2. 在公众号后台配置服务器 IP 白名单。
+3. 先跑 `deno task article:dry` 检查正文和图片。
+4. 再设置 `features.article.dryRun: false` 并运行 `deno task article`。
+
+部署细节见 [部署文档](docs/deployment.md)。
+
+## JSON-RPC API
+
+服务启动后提供 `POST /api/workflow`，可手动触发微信文章工作流。
 
 ```bash
-git clone https://github.com/liyown/ai-trend-publish.git
+curl -X POST http://localhost:8000/api/workflow \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "triggerWorkflow",
+    "params": {
+      "workflowType": "weixin-article-workflow",
+      "dryRun": true
+    },
+    "id": 1
+  }'
 ```
 
-2. 构建 Docker 镜像：
+更多说明见 [JSON-RPC API 文档](docs/api/json-rpc-api.md)。
+
+## 相关文档
+
+- [快速开始](docs/getting-started.md)
+- [配置说明](docs/configuration.md)
+- [架构总览](docs/architecture.md)
+- [模板文档](docs/templates.md)
+- [部署文档](docs/deployment.md)
+- [Jina 集成指南](docs/integrations/jina-integration-guide.md)
+- [钉钉通知指南](docs/integrations/dingtalk-webhook-guide.md)
+
+## 社区与贡献
+
+- Discord: [https://discord.gg/mrZvBHNawS](https://discord.gg/mrZvBHNawS)
+- QQ 群：TrendPublish-1
+
+欢迎提交 Issue 和 Pull Request。建议在提交前先运行：
 
 ```bash
-# 构建镜像
-docker build -t ai-trend-publish .
+deno task verify
 ```
 
-4. 运行容器：
+## 致谢
 
-```bash
-# 运行前确保镜像中包含 trendpublish.config.ts，或通过挂载提供
-docker run -d \
-  -v $(pwd)/trendpublish.config.ts:/app/trendpublish.config.ts \
-  --name ai-trend-publish-container \
-  ai-trend-publish
-```
-
-### CI/CD 自动部署
-
-项目保留 GitHub Actions 手动部署流程：
-
-1. 在 GitHub Actions 页面手动触发 `Deploy to Production`
-2. 确保部署环境中提供 `trendpublish.config.ts`
-3. 当前 release tag 不会自动触发生产部署，避免未配置环境被自动覆盖
-4. 需要配置以下 SSH secret：
-   - `SERVER_HOST`: 服务器地址
-   - `SERVER_USER`: 服务器用户名
-   - `SSH_PRIVATE_KEY`: SSH 私钥
-
-## 模板开发指南
-
-本项目支持自定义模板开发，主要包含以下几个部分：
-
-### 1. 了解数据结构
-
-查看 `src/features/weixin-article/domain/renderable-article.ts`
-中的类型定义，了解微信文章渲染需要的数据结构。
-
-### 2. 开发模板
-
-在 `src/features/weixin-article/rendering/templates` 目录下开发 EJS 模板。
-动态模板逻辑位于 `src/features/weixin-article/rendering/dynamic`，不依赖固定 EJS
-文件。
-
-### 3. 注册模板
-
-在对应的渲染器类中注册新模板，如 `WeixinArticleTemplateRenderer`：
-
-### 4. 测试渲染效果
-
-```
-deno task preview
-```
-
-## 🤝 贡献指南
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 提交 Pull Request
-
-## ❤️ 特别感谢
-
-感谢以下贡献者对项目的支持：
-
-<a href="https://github.com/kilimro">
-  <img src="https://avatars.githubusercontent.com/u/52153481?v=4" width="50" height="50" alt="kilimro">
-</a>
+感谢社区贡献者对项目的支持。
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liyown/ai-trend-publish&type=Date)](https://star-history.com/#liyown/ai-trend-publish&Date)
+[Star History Chart](https://star-history.com/#liyown/ai-trend-publish&Date)
 
-## 📄 许可证
+## License
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
-### JSON-RPC API
-
-提供了基于 JSON-RPC 2.0 协议的 API，支持手动触发工作流。
-
-- 端点: `/api/workflow`
-- 支持方法: `triggerWorkflow`
-- 详细文档:
-  [JSON-RPC API 文档](https://liyown.github.io/ai-trend-publish/api/json-rpc-api)
-
-![](https://oss.liuyaowen.cn/image/202504242031044.png)
+本项目使用 MIT License，详见 [LICENSE](LICENSE)。
