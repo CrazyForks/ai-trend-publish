@@ -1,4 +1,4 @@
-FROM denoland/deno:2.3.7
+FROM denoland/deno:2.7.14
 
 WORKDIR /app
 
@@ -26,4 +26,4 @@ USER deno
 
 EXPOSE 8000
 
-CMD ["deno", "task", "start"]
+CMD ["deno", "task", "dev"]

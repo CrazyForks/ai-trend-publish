@@ -39,6 +39,8 @@
 
 - Dockerfile 在镜像构建阶段自动构建 dashboard，GHCR
   镜像内置控制台，部署后可直接访问 `/dashboard`。
+- Docker 基础镜像固定为 Deno `2.7.14`，满足 Vite 8 对 Node 兼容 API 的要求。
+- Docker 默认启动命令改为 `deno task dev`，避免引用已删除的旧 `start` 任务。
 - `wrangler.jsonc` 增加 Workers Static Assets 绑定，Cloudflare 部署会同时上传
   dashboard 静态资源。
 - `deno task cf dry-run` 和 `deno task cf deploy` 会自动先构建 dashboard，再执行
