@@ -8,12 +8,18 @@
     "@zilla/logger": "./src/platform/cloudflare/shims/logger.ts",
     "jsr:@deno-library/progress": "./src/platform/cloudflare/shims/progress.ts",
     "npm:axios": "axios",
+    "npm:axios@1.8.3": "axios",
     "npm:ejs": "ejs",
+    "npm:ejs@3.1.10": "ejs",
     "npm:fast-xml-parser": "fast-xml-parser",
+    "npm:fast-xml-parser@5.0.9": "fast-xml-parser",
     "npm:firecrawl": "firecrawl",
+    "npm:firecrawl@1.19.0": "firecrawl",
     "npm:openai": "openai",
+    "npm:openai@4.87.3": "openai",
     "npm:zod": "zod",
-    "npm:zod@3.23.8": "zod"
+    "npm:zod@3.23.8": "zod",
+    "npm:zod@3.25.76": "zod"
   },
   "observability": {
     "enabled": true,
