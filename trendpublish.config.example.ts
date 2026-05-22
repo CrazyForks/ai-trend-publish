@@ -1,4 +1,4 @@
-import { defineConfig } from "./src/utils/config/define-config.ts";
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 export default defineConfig({
   /**

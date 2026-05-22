@@ -2,7 +2,7 @@ import {
   ArticleNotificationChannel,
   ArticleTemplateType,
   defineConfig,
-} from "./src/utils/config/define-config.ts";
+} from "@src/utils/config/define-config.ts";
 import { PromptProfileName } from "./src/prompts/prompt-profile.ts";
 
 function splitList(value: string): string[] {

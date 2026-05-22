@@ -70,3 +70,54 @@ Deno.test("initializeAppConfig rejects missing explicit config path", async () =
     "配置文件不存在",
   );
 });
+
+Deno.test("initializeAppConfig loads config from config directory with @src import", async () => {
+  const dir = await Deno.makeTempDir();
+  const configPath = `${dir}/trendpublish.config.ts`;
+  await Deno.writeTextFile(
+    configPath,
+    `
+import { defineConfig } from "@src/utils/config/define-config.ts";
+
+export default defineConfig({
+  server: { apiKey: "server-key" },
+  providers: {
+    ai: {
+      baseUrl: "https://example.com/v1",
+      apiKey: "ai-key",
+      model: "test-model",
+    },
+  },
+});
+`,
+  );
+
+  const config = await initializeAppConfig({ configPath });
+  assertEquals(config.server.apiKey, "server-key");
+
+  await Deno.remove(dir, { recursive: true });
+});
+
+Deno.test("initializeAppConfig explains broken config directory relative import", async () => {
+  const dir = await Deno.makeTempDir();
+  const configDir = `${dir}/config`;
+  await Deno.mkdir(configDir);
+  const configPath = `${configDir}/trendpublish.config.ts`;
+  await Deno.writeTextFile(
+    configPath,
+    `
+import { defineConfig } from "./src/utils/config/define-config.ts";
+export default defineConfig({});
+`,
+  );
+
+  try {
+    await assertRejects(
+      () => initializeAppConfig({ configPath }),
+      ConfigurationError,
+      `import { defineConfig } from "@src/utils/config/define-config.ts";`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});

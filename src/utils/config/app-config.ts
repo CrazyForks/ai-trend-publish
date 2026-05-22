@@ -196,12 +196,42 @@ async function loadAppConfig(
 
   const moduleUrl = pathToFileURL(configPath).href;
   const cacheSuffix = options.bustCache ? `?t=${Date.now()}` : "";
-  const module = await import(`${moduleUrl}${cacheSuffix}`) as ConfigModule;
+  const module = await importConfigModule(
+    `${moduleUrl}${cacheSuffix}`,
+    configPath,
+  );
   const config = await resolveConfigSource(
     module.default ?? module.config ?? {},
     runtime,
   );
   return resolveTrendPublishConfig(config);
+}
+
+async function importConfigModule(
+  moduleUrl: string,
+  configPath: string,
+): Promise<ConfigModule> {
+  try {
+    return await import(moduleUrl) as ConfigModule;
+  } catch (error) {
+    throw improveConfigImportError(error, configPath);
+  }
+}
+
+function improveConfigImportError(error: unknown, configPath: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    message.includes("/config/src/utils/config/define-config.ts") ||
+    message.includes("\\config\\src\\utils\\config\\define-config.ts")
+  ) {
+    return new ConfigurationError(
+      `配置文件导入路径无效: ${configPath}\n` +
+        `如果配置文件放在 config/ 目录，请把第一行改成:\n` +
+        `import { defineConfig } from "@src/utils/config/define-config.ts";`,
+    );
+  }
+
+  return error instanceof Error ? error : new Error(message);
 }
 
 function resolveConfigPath(configPath?: string): {

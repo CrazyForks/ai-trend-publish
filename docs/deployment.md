@@ -60,7 +60,7 @@ services:
 如果希望密钥由 Docker secrets 或平台变量提供，可以使用配置函数：
 
 ```ts
-import { defineConfig } from "../src/utils/config/define-config.ts";
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 export default defineConfig((runtime) => ({
   server: {
@@ -387,6 +387,13 @@ cp trendpublish.config.example.ts config/trendpublish.config.ts
 
 编辑 `config/trendpublish.config.ts`，填好 `server.apiKey` 和
 `providers.publish.weixin.appId/appSecret`，然后前台启动：
+
+如果你是从旧示例复制过来的配置文件，第一行请使用这个导入，避免放到 `config/`
+目录后解析到错误路径：
+
+```ts
+import { defineConfig } from "@src/utils/config/define-config.ts";
+```
 
 ```bash
 PORT=8080 deno task weixin:relay --config ./config/trendpublish.config.ts

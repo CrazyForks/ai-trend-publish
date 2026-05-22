@@ -75,7 +75,7 @@ deno task doctor
 最小配置只需要服务密钥和一套大模型配置：
 
 ```ts
-import { defineConfig } from "./src/utils/config/define-config.ts";
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 export default defineConfig({
   server: {

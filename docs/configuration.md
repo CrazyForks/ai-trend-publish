@@ -32,7 +32,7 @@ deno task dev --config ./config/trendpublish.config.ts
 `defineConfig` 写成函数：
 
 ```ts
-import { defineConfig } from "./src/utils/config/define-config.ts";
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 export default defineConfig((runtime) => ({
   server: {
@@ -61,7 +61,7 @@ export default defineConfig((runtime) => ({
 如果只是启动服务、预览模板、跑 AI 摘要和动态模板，先填这一组：
 
 ```ts
-import { defineConfig } from "./src/utils/config/define-config.ts";
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 export default defineConfig({
   server: { apiKey: "your-api-key" },

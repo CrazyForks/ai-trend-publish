@@ -80,6 +80,25 @@ Deno.test("config model does not keep legacy fallback switches", async () => {
   assertEquals(violations, []);
 });
 
+Deno.test("public config examples use location-independent imports", async () => {
+  const violations: string[] = [];
+  const forbiddenImports = [
+    `from "./src/utils/config/define-config.ts"`,
+    `from "../src/utils/config/define-config.ts"`,
+  ];
+
+  for (const file of RELEASE_DOC_FILES) {
+    const content = await Deno.readTextFile(file);
+    for (const text of forbiddenImports) {
+      if (content.includes(text)) {
+        violations.push(`${file}: ${text}`);
+      }
+    }
+  }
+
+  assertEquals(violations, []);
+});
+
 async function exists(path: string): Promise<boolean> {
   try {
     await Deno.stat(path);

@@ -1,5 +1,5 @@
-// 这个示例用于复制到 config/trendpublish.config.ts，所以这里从 config 目录回到项目根目录。
-import { defineConfig } from "../src/utils/config/define-config.ts";
+// 这个示例可以放在项目根目录，也可以复制到 config/trendpublish.config.ts。
+import { defineConfig } from "@src/utils/config/define-config.ts";
 
 function splitList(value: string): string[] {
   return value
