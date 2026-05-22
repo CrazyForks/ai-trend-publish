@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { postProcessDynamicHtml } from "@src/features/weixin-article/rendering/dynamic/html-post-processor.ts";
 import { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
 import { formatDate } from "@src/utils/common.ts";
-import ejs from "npm:ejs";
+import ejs from "npm:ejs@3.1.10";
 
 const PLACEHOLDER_IMAGE =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='675' viewBox='0 0 1200 675'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f8fafc'/%3E%3Cstop offset='1' stop-color='%23e5e7eb'/%3E%3C/linearGradient%3E%3ClinearGradient id='m' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23bfdbfe'/%3E%3Cstop offset='1' stop-color='%23dbeafe'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='675' fill='url(%23g)'/%3E%3Crect x='80' y='80' width='1040' height='515' rx='32' fill='%23ffffff' stroke='%23d1d5db' stroke-width='2'/%3E%3Ccircle cx='248' cy='226' r='62' fill='%23e5e7eb'/%3E%3Ccircle cx='330' cy='188' r='24' fill='%23dbeafe'/%3E%3Cpath d='M154 505L386 276l138 132 104-98 418 195H154z' fill='url(%23m)'/%3E%3Cpath d='M154 505L386 276l138 132 104-98 418 195' fill='none' stroke='%2393c5fd' stroke-width='8' stroke-linejoin='round'/%3E%3Crect x='700' y='180' width='290' height='28' rx='14' fill='%23e5e7eb'/%3E%3Crect x='700' y='235' width='390' height='22' rx='11' fill='%23eef2f7'/%3E%3Crect x='700' y='279' width='340' height='22' rx='11' fill='%23eef2f7'/%3E%3Crect x='700' y='323' width='250' height='22' rx='11' fill='%23eef2f7'/%3E%3C/svg%3E";

@@ -4,7 +4,7 @@ import {
   EmbeddingResult,
 } from "@src/core/ports/embedding.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
-import OpenAI from "npm:openai";
+import OpenAI from "npm:openai@4.87.3";
 
 type EmbeddingConfig =
   ResolvedTrendPublishConfig["providers"]["vector"]["embedding"];

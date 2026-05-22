@@ -5,7 +5,7 @@ import {
   EmbeddingProvider,
   EmbeddingResult,
 } from "@src/core/ports/embedding.ts";
-import { z } from "npm:zod@3.23.8";
+import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina Embeddings API Request
 const JinaEmbeddingRequestSchema = z.object({

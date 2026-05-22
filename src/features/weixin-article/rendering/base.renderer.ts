@@ -1,4 +1,4 @@
-import ejs from "npm:ejs";
+import ejs from "npm:ejs@3.1.10";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("base-template-renderer");

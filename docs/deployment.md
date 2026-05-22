@@ -374,6 +374,67 @@ volumes:
 curl http://<relay-host>:8080/health
 ```
 
+### 源码运行 relay
+
+如果固定 IP 机器不想用 Docker，也可以直接从源码运行同一个 relay：
+
+```bash
+git clone https://github.com/liyown/ai-trend-publish.git
+cd ai-trend-publish
+mkdir -p config
+cp trendpublish.config.example.ts config/trendpublish.config.ts
+```
+
+编辑 `config/trendpublish.config.ts`，填好 `server.apiKey` 和
+`providers.publish.weixin.appId/appSecret`，然后前台启动：
+
+```bash
+PORT=8080 deno task weixin:relay --config ./config/trendpublish.config.ts
+```
+
+前台模式适合临时验证。生产环境建议用 systemd 保活：
+
+```bash
+deno task relay:install \
+  --config ./config/trendpublish.config.ts \
+  --port 8080
+```
+
+这个命令会自动写入 `trendpublish-weixin-relay.service`、执行
+`systemctl daemon-reload`，并启动开机自启。默认使用当前登录用户运行服务。
+
+如果源码目录、配置路径或运行用户需要显式指定：
+
+```bash
+deno task relay:install \
+  --workdir /opt/ai-trend-publish \
+  --config /opt/ai-trend-publish/config/trendpublish.config.ts \
+  --user trendpublish \
+  --port 8080
+```
+
+只想生成 service 文件，也可以使用：
+
+```bash
+deno task relay:systemd \
+  --workdir /opt/ai-trend-publish \
+  --config /opt/ai-trend-publish/config/trendpublish.config.ts \
+  --user trendpublish \
+  --port 8080 | sudo tee /etc/systemd/system/trendpublish-weixin-relay.service
+```
+
+查看日志：
+
+```bash
+sudo journalctl -u trendpublish-weixin-relay -f
+```
+
+仓库也提供了可手工复制修改的模板：
+
+```text
+deploy/systemd/trendpublish-weixin-relay.service
+```
+
 如果 relay 通过域名暴露，建议在网关或反向代理上配置 HTTPS，然后把 Cloudflare 的
 `WEIXIN_RELAY_URL` 设置成：
 

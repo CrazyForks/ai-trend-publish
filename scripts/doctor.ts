@@ -78,6 +78,8 @@ function checkFiles(configPath?: string) {
     actualConfigPath,
     "src/index.ts",
     "scripts/run.workflow.ts",
+    "scripts/print-relay-systemd.ts",
+    "scripts/install-relay-systemd.ts",
     "src/app/weixin-article/workflow.definition.ts",
     "src/platform/cloudflare/worker.ts",
     "trendpublish.config.cloudflare.ts",
@@ -101,7 +103,7 @@ function checkFiles(configPath?: string) {
       "docker-compose.yml",
       "docker-compose.relay.yml",
       "trendpublish.config.docker.example.ts",
-      "trendpublish.relay.config.example.ts",
+      "deploy/systemd/trendpublish-weixin-relay.service",
       ".github/workflows/docker-image.yml",
     );
   }

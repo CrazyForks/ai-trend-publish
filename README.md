@@ -312,6 +312,12 @@ deno task docker:build
 # 固定 IP 机器上的微信发布中转服务
 deno task weixin:relay
 
+# 一键安装 relay 为 systemd 保活服务
+deno task relay:install --config ./config/trendpublish.config.ts --port 8080
+
+# 生成 relay 的 systemd 保活服务文件
+deno task relay:systemd
+
 # Cloudflare Worker/Workflow 类型检查
 deno task cf:check
 

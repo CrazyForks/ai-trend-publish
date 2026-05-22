@@ -110,13 +110,13 @@
  * ```
  */
 
-import axios, { AxiosError } from "npm:axios";
+import axios, { AxiosError } from "npm:axios@1.8.3";
 import {
   ContentScraper,
   ScrapedContent,
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
-import { XMLParser } from "npm:fast-xml-parser";
+import { XMLParser } from "npm:fast-xml-parser@5.0.9";
 
 // 类型定义
 /**

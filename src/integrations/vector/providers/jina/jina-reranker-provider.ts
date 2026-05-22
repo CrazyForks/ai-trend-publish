@@ -5,7 +5,7 @@ import {
   RerankerOptions,
   RerankerProvider,
 } from "@src/core/ports/reranker.ts";
-import { z } from "npm:zod@3.23.8";
+import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina Reranker API Request
 const JinaRerankerRequestSchema = z.object({

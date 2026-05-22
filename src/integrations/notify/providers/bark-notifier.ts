@@ -1,4 +1,4 @@
-import axios from "npm:axios";
+import axios from "npm:axios@1.8.3";
 import { INotifier, Level } from "@src/core/ports/notifier.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { Logger } from "@zilla/logger";

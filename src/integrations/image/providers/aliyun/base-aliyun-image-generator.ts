@@ -1,5 +1,5 @@
 import { BaseImageGenerator } from "@src/integrations/image/providers/base-image-generator.ts";
-import axios from "npm:axios";
+import axios from "npm:axios@1.8.3";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("aliyun");

@@ -1,4 +1,4 @@
-import cron from "npm:node-cron";
+import cron from "npm:node-cron@3.0.3";
 import { Logger } from "@zilla/logger";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import {

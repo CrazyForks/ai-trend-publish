@@ -1,4 +1,4 @@
-import axios from "npm:axios";
+import axios from "npm:axios@1.8.3";
 import { LLMProvider } from "@src/core/ports/llm.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";

@@ -6,7 +6,7 @@ import {
   ScraperOptions,
   // Media, // Media is unlikely to be directly from deepsearch text results
 } from "@src/core/ports/content-scraper.ts";
-import { z } from "npm:zod@3.23.8";
+import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina DeepSearch API Request (minimal)
 const DeepSearchRequestSchema = z.object({

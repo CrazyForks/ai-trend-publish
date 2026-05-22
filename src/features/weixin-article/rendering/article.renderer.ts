@@ -3,7 +3,7 @@ import {
   NoopArticleImageLayoutService,
   WeixinTemplate,
 } from "@src/features/weixin-article/domain/renderable-article.ts";
-import ejs from "npm:ejs";
+import ejs from "npm:ejs@3.1.10";
 import { BaseTemplateRenderer } from "@src/features/weixin-article/rendering/base.renderer.ts";
 import { Logger } from "@zilla/logger";
 import type { ContentImageUploader } from "@src/core/ports/content-publisher.ts";

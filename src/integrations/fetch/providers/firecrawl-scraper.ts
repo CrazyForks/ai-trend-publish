@@ -1,11 +1,11 @@
-import FirecrawlApp from "npm:firecrawl";
+import FirecrawlApp from "npm:firecrawl@1.19.0";
 import {
   ContentScraper,
   ScrapedContent,
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
 import { formatDate } from "@src/utils/common.ts";
-import zod from "npm:zod";
+import zod from "npm:zod@3.25.76";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("fireCrawl-scraper");

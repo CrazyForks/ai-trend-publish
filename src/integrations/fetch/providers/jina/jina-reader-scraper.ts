@@ -6,7 +6,7 @@ import {
   ScrapedContent,
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
-import { z } from "npm:zod@3.23.8";
+import { z } from "npm:zod@3.25.76";
 
 // Define a schema for the Jina API response for stricter parsing.
 const JinaResponseSchema = z.object({
