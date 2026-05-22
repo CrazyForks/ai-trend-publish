@@ -21,10 +21,9 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Update Dependencies and Generate Lock File
+      - name: Cache Dependencies
         run: |
-          rm -f deno.lock
-          deno cache --reload src/index.ts
+          deno cache src/index.ts
 
       - name: Verify
         run: deno task verify
