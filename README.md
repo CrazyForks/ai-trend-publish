@@ -376,7 +376,7 @@ docker compose up -d
 微信 relay 也是同一个镜像、同一个配置文件名，只是启动命令不同：
 
 ```bash
-cp trendpublish.relay.config.example.ts config/trendpublish.config.ts
+cp trendpublish.config.example.ts config/trendpublish.config.ts
 deno task docker:relay:up
 ```
 

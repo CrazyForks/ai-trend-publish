@@ -13,7 +13,6 @@ COPY migrations ./migrations
 COPY trendpublish.config.example.ts ./trendpublish.config.example.ts
 COPY trendpublish.config.docker.example.ts ./trendpublish.config.docker.example.ts
 COPY trendpublish.config.cloudflare.ts ./trendpublish.config.cloudflare.ts
-COPY trendpublish.relay.config.example.ts ./trendpublish.relay.config.example.ts
 COPY wrangler.jsonc ./wrangler.jsonc
 
 RUN deno cache src/index.ts src/apps/weixin-relay/server.ts scripts/run.workflow.ts scripts/doctor.ts scripts/preview.weixin.ts

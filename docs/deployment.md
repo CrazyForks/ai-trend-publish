@@ -339,7 +339,7 @@ relay 机器上，不放 Cloudflare。
 
 ```bash
 mkdir -p config
-cp trendpublish.relay.config.example.ts config/trendpublish.config.ts
+cp trendpublish.config.example.ts config/trendpublish.config.ts
 ```
 
 编辑 `config/trendpublish.config.ts`，至少填这三项：
@@ -349,6 +349,8 @@ cp trendpublish.relay.config.example.ts config/trendpublish.config.ts
 - `providers.publish.weixin.appSecret`：微信公众号 AppSecret。
 
 如果这些字段还是 `change-me` / `your-*` 占位值，relay 会拒绝启动。
+如果你已经有一份完整的 `trendpublish.config.ts`，直接挂载同一份即可，不需要
+relay 专用配置文件。
 
 启动 relay：
 
