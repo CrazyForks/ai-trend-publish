@@ -1,18 +1,20 @@
 import { ContentRanker } from "@src/modules/content-rank/ai.content-ranker.ts";
 import { AISummarizer } from "@src/modules/summarizer/ai.summarizer.ts";
 import { WeixinPublisher } from "@src/integrations/publish/providers/weixin-publisher.ts";
+import { WeixinRelayPublisher } from "@src/integrations/publish/providers/weixin-relay-publisher.ts";
 import { WeixinArticleTemplateRenderer } from "@src/features/weixin-article/rendering/article.renderer.ts";
 import { WeixinDynamicHtmlGenerator } from "@src/features/weixin-article/rendering/dynamic/dynamic-html.generator.ts";
 import { ImageGeneratorResolver } from "@src/integrations/image/image-generator-resolver.ts";
 import { LlmProviderResolver } from "@src/integrations/llm/llm-provider-resolver.ts";
 import { EmbeddingProviderResolver } from "@src/integrations/vector/embedding-provider-resolver.ts";
-import { VectorService } from "@src/integrations/vector/vector-store.service.ts";
-import { createMysqlDatabase } from "@src/db/db.ts";
 import { EmbeddingProviderType } from "@src/core/ports/embedding.ts";
 import { planArticleSources } from "@src/app/weixin-article/fetch/article-fetch-planner.ts";
 import { ArticleFetchRouter } from "@src/app/weixin-article/fetch/article-fetch-router.ts";
 import { createArticleNotifier } from "@src/app/weixin-article/notifications.ts";
-import { WeixinArticleDependencies } from "@src/features/weixin-article/dependencies.ts";
+import type {
+  WeixinArticleDependencies,
+  WeixinArticlePublisher,
+} from "@src/features/weixin-article/dependencies.ts";
 import {
   AiArticleImageLayoutService,
   WeixinArticleImageLayoutService,
@@ -25,9 +27,25 @@ import { WeixinArticleDryRunOutputService } from "@src/features/weixin-article/s
 import { WeixinArticleRenderService } from "@src/features/weixin-article/services/article-render.service.ts";
 import { WeixinArticleTitleService } from "@src/features/weixin-article/services/article-title.service.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
+import type {
+  RunStateStore,
+  RuntimeMode,
+} from "@src/core/ports/run-state-store.ts";
+import { MemoryArtifactStore } from "@src/core/storage/memory-artifact-store.ts";
+import { MemoryRunStateStore } from "@src/core/storage/memory-run-state-store.ts";
+import type { VectorStore } from "@src/core/ports/vector-store.ts";
+
+export interface CreateWeixinArticleDependenciesOptions {
+  artifactStore?: ArtifactStore;
+  runStateStore?: RunStateStore;
+  mode?: RuntimeMode;
+  vectorStoreFactory?: () => Promise<VectorStore>;
+}
 
 export async function createWeixinArticleDependencies(
   config: ResolvedTrendPublishConfig,
+  options: CreateWeixinArticleDependenciesOptions = {},
 ): Promise<WeixinArticleDependencies> {
   const stats = {
     success: 0,
@@ -35,7 +53,7 @@ export async function createWeixinArticleDependencies(
     contents: 0,
     duplicates: 0,
   };
-  const publisher = new WeixinPublisher(config.providers.publish.weixin);
+  const publisher = createPublisher(config);
   const notifier = createArticleNotifier(config);
   const llmResolver = new LlmProviderResolver(config);
   const llmProvider = await llmResolver.getDefaultProvider();
@@ -45,6 +63,8 @@ export async function createWeixinArticleDependencies(
   const deduplication = config.features.article.deduplication;
   const renderer = config.features.article.renderer;
   const promptProfile = renderer.promptProfile;
+  const artifactStore = options.artifactStore ?? new MemoryArtifactStore();
+  const runStateStore = options.runStateStore ?? new MemoryRunStateStore();
   const imageLayoutService = new AiArticleImageLayoutService(
     new WeixinArticleImageLayoutService(),
     imageGeneratorResolver,
@@ -76,10 +96,11 @@ export async function createWeixinArticleDependencies(
         model: config.providers.vector.embedding.model,
       },
       embeddingResolver,
-      async () => {
-        const database = createMysqlDatabase(config.storage.mysql);
-        return new VectorService(database.db);
-      },
+      options.vectorStoreFactory ?? (async () => {
+        throw new Error(
+          `向量去重需要注入 ${config.storage.vector.provider} VectorStore`,
+        );
+      }),
     ),
     processService: new WeixinArticleContentProcessService(
       new AISummarizer(llmProvider, promptProfile),
@@ -101,13 +122,29 @@ export async function createWeixinArticleDependencies(
         renderer.template,
       ),
     ),
-    dryRunOutputService: new WeixinArticleDryRunOutputService(),
+    dryRunOutputService: new WeixinArticleDryRunOutputService(artifactStore),
     contentRanker: new ContentRanker(llmProvider, promptProfile),
     stats,
+    runtime: {
+      artifactStore,
+      runStateStore,
+      mode: options.mode ?? "local",
+    },
     config: {
       dryRun: config.features.article.dryRun,
     },
   };
+}
+
+function createPublisher(
+  config: ResolvedTrendPublishConfig,
+): WeixinArticlePublisher {
+  switch (config.features.article.publisher.provider) {
+    case "weixin":
+      return new WeixinPublisher(config.providers.publish.weixin);
+    case "weixin-relay":
+      return new WeixinRelayPublisher(config.providers.publish.weixinRelay);
+  }
 }
 
 function resolveEmbeddingProviderType(

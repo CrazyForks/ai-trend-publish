@@ -19,13 +19,39 @@ export type FetchProviderName =
   | "twitter"
   | "rss";
 
-export type ArticlePublisherProvider = "weixin";
+export type ArticlePublisherProvider = "weixin" | "weixin-relay";
 export type ArticleImageProvider = "dashscope";
 export type ArticleEmbeddingProvider = "dashscope";
-export type ArticleVectorStoreProvider = "mysql";
+export type ArticleVectorStoreProvider = "sqlite" | "d1";
 export type ArticleNotificationChannel = "bark" | "dingtalk" | "feishu";
 export type ArticleBodyImageMode = "off" | "missing" | "all";
 export type ArticleImageSize = `${number}*${number}`;
+export type ConfigRuntimeTarget = "local" | "docker" | "cloudflare";
+
+/**
+ * 动态配置读取上下文。
+ *
+ * 用于 Docker secrets、Cloudflare bindings/secrets 等部署环境。配置结构仍然写在
+ * TypeScript 中，只有具体敏感值或部署时变化的值从运行时读取。
+ */
+export interface ConfigRuntime {
+  /** 当前运行目标。 */
+  target: ConfigRuntimeTarget;
+  /** 读取普通运行时值。未找到时返回 fallback，fallback 也未给时返回空字符串。 */
+  value(name: string, fallback?: string): string;
+  /** 读取敏感值。Docker 会优先读取 /run/secrets/<name>。 */
+  secret(name: string, fallback?: string): string;
+  /** 读取必填值。缺失时抛出清晰错误。 */
+  required(name: string): string;
+}
+
+export type TrendPublishConfigFactory = (
+  runtime: ConfigRuntime,
+) => TrendPublishConfig | Promise<TrendPublishConfig>;
+
+export type TrendPublishConfigSource =
+  | TrendPublishConfig
+  | TrendPublishConfigFactory;
 
 /**
  * OpenAI Chat Completions 兼容模型接口配置。
@@ -88,6 +114,13 @@ export interface PublishProvidersConfig {
     needOpenComment?: boolean;
     /** 是否仅粉丝可留言。 */
     onlyFansCanComment?: boolean;
+  };
+  /** 微信发布中转服务。用于 Cloudflare 等没有固定出口 IP 的部署方式。 */
+  weixinRelay?: {
+    /** Relay 服务地址，例如 "https://relay.example.com"。 */
+    url?: string;
+    /** Relay Bearer Token。 */
+    token?: string;
   };
 }
 
@@ -161,7 +194,7 @@ export interface ArticleRendererConfig {
 
 /** 文章发布 provider 选择。 */
 export interface ArticlePublisherConfig {
-  /** 文章工作流使用的发布 provider。当前只支持 "weixin"。 */
+  /** 文章工作流使用的发布 provider。本地固定 IP 可用 "weixin"，Cloudflare 推荐 "weixin-relay"。 */
   provider?: ArticlePublisherProvider;
 }
 
@@ -210,7 +243,7 @@ export interface ArticleDeduplicationConfig {
   enabled?: boolean;
   /** 去重使用的 embedding provider。当前只支持 "dashscope"。 */
   embeddingProvider?: ArticleEmbeddingProvider;
-  /** 存储文章向量的后端。当前只支持 "mysql"。 */
+  /** 存储文章向量的后端。本地/Docker 使用 "sqlite"，Cloudflare 使用 "d1"。 */
   vectorStore?: ArticleVectorStoreProvider;
 }
 
@@ -247,26 +280,43 @@ export interface FeaturesConfig {
   article?: ArticleFeatureConfig;
 }
 
-/** MySQL 业务数据存储配置，例如向量去重记录。 */
-export interface MysqlStorageConfig {
-  /** 是否启用数据库存储。 */
-  enabled?: boolean;
-  /** MySQL 主机地址。 */
-  host?: string;
-  /** MySQL 端口，默认 3306。 */
-  port?: number;
-  /** MySQL 用户名。 */
-  user?: string;
-  /** MySQL 密码。 */
-  password?: string;
-  /** 数据库名称。 */
-  database?: string;
+export interface ArtifactStorageConfig {
+  /** Artifact 存储后端。本地/Docker 默认 local，Cloudflare 推荐 r2，也可用 kv 轻量部署。 */
+  provider?: "local" | "kv" | "r2";
+  /** local artifact 输出目录，默认 src/temp。 */
+  outputDir?: string;
+  /** Cloudflare R2 bucket binding 名称，默认 ARTICLE_ARTIFACTS。 */
+  bucketBinding?: "ARTICLE_ARTIFACTS" | string;
+}
+
+export interface RunStateStorageConfig {
+  /** 运行状态存储后端。本地默认 local-json，Cloudflare 默认 kv-d1。 */
+  provider?: "memory" | "local-json" | "kv-d1";
+  /** local-json 输出目录，默认 src/temp。 */
+  outputDir?: string;
+  /** Cloudflare KV binding 名称，默认 ARTICLE_RUNS。 */
+  kvBinding?: "ARTICLE_RUNS" | string;
+  /** Cloudflare D1 binding 名称，默认 ARTICLE_DB。 */
+  d1Binding?: "ARTICLE_DB" | string;
+}
+
+export interface VectorStorageConfig {
+  /** 向量去重存储后端。本地/Docker 默认 sqlite，Cloudflare 可用 d1。 */
+  provider?: ArticleVectorStoreProvider;
+  /** 本地 SQLite 数据库文件路径，默认 src/temp/trendpublish.sqlite3。 */
+  sqlitePath?: string;
+  /** Cloudflare D1 binding 名称，默认 ARTICLE_DB。 */
+  d1Binding?: "ARTICLE_DB" | string;
 }
 
 /** 存储配置。运行配置不会存入数据库。 */
 export interface StorageConfig {
-  /** 用于保存向量去重记录等业务数据的 MySQL 存储。 */
-  mysql?: MysqlStorageConfig;
+  /** 工作流产物存储。 */
+  artifacts?: ArtifactStorageConfig;
+  /** 工作流运行状态和步骤记录存储。 */
+  runState?: RunStateStorageConfig;
+  /** 向量去重存储。 */
+  vector?: VectorStorageConfig;
 }
 
 /**
@@ -329,6 +379,10 @@ export interface ResolvedTrendPublishConfig {
         needOpenComment: boolean;
         onlyFansCanComment: boolean;
       };
+      weixinRelay: {
+        url: string;
+        token: string;
+      };
     };
     notify: {
       bark: {
@@ -380,18 +434,28 @@ export interface ResolvedTrendPublishConfig {
     };
   };
   storage: {
-    mysql: {
-      enabled: boolean;
-      host: string;
-      port: number;
-      user: string;
-      password: string;
-      database: string;
+    artifacts: {
+      provider: "local" | "kv" | "r2";
+      outputDir: string;
+      bucketBinding: string;
+    };
+    runState: {
+      provider: "memory" | "local-json" | "kv-d1";
+      outputDir: string;
+      kvBinding: string;
+      d1Binding: string;
+    };
+    vector: {
+      provider: ArticleVectorStoreProvider;
+      sqlitePath: string;
+      d1Binding: string;
     };
   };
 }
 
-export function defineConfig(config: TrendPublishConfig): TrendPublishConfig {
+export function defineConfig<T extends TrendPublishConfigSource>(
+  config: T,
+): T {
   return config;
 }
 
@@ -443,6 +507,10 @@ export function resolveTrendPublishConfig(
             true,
           onlyFansCanComment:
             config.providers?.publish?.weixin?.onlyFansCanComment ?? false,
+        },
+        weixinRelay: {
+          url: config.providers?.publish?.weixinRelay?.url ?? "",
+          token: config.providers?.publish?.weixinRelay?.token ?? "",
         },
       },
       notify: {
@@ -497,18 +565,29 @@ export function resolveTrendPublishConfig(
           enabled: article.deduplication?.enabled ?? false,
           embeddingProvider: article.deduplication?.embeddingProvider ??
             "dashscope",
-          vectorStore: article.deduplication?.vectorStore ?? "mysql",
+          vectorStore: article.deduplication?.vectorStore ?? "sqlite",
         },
       },
     },
     storage: {
-      mysql: {
-        enabled: config.storage?.mysql?.enabled ?? false,
-        host: config.storage?.mysql?.host ?? "127.0.0.1",
-        port: config.storage?.mysql?.port ?? 3306,
-        user: config.storage?.mysql?.user ?? "root",
-        password: config.storage?.mysql?.password ?? "",
-        database: config.storage?.mysql?.database ?? "ai_trend_publish",
+      artifacts: {
+        provider: config.storage?.artifacts?.provider ?? "local",
+        outputDir: config.storage?.artifacts?.outputDir ?? "src/temp",
+        bucketBinding: config.storage?.artifacts?.bucketBinding ??
+          "ARTICLE_ARTIFACTS",
+      },
+      runState: {
+        provider: config.storage?.runState?.provider ?? "local-json",
+        outputDir: config.storage?.runState?.outputDir ?? "src/temp",
+        kvBinding: config.storage?.runState?.kvBinding ?? "ARTICLE_RUNS",
+        d1Binding: config.storage?.runState?.d1Binding ?? "ARTICLE_DB",
+      },
+      vector: {
+        provider: config.storage?.vector?.provider ??
+          article.deduplication?.vectorStore ?? "sqlite",
+        sqlitePath: config.storage?.vector?.sqlitePath ??
+          "src/temp/trendpublish.sqlite3",
+        d1Binding: config.storage?.vector?.d1Binding ?? "ARTICLE_DB",
       },
     },
   };

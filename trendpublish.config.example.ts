@@ -78,6 +78,14 @@ export default defineConfig({
         needOpenComment: true,
         onlyFansCanComment: false,
       },
+      /**
+       * Cloudflare Worker 没有固定出口 IP。真实发布建议让 Cloudflare 调用
+       * 固定 IP 机器上的 weixin-relay，由 relay 保存微信 appId/appSecret。
+       */
+      weixinRelay: {
+        url: "",
+        token: "",
+      },
     },
 
     /**
@@ -155,7 +163,8 @@ export default defineConfig({
       /**
        * 发布 provider 选择。
        *
-       * 微信公众号凭证配置在 `providers.publish.weixin`。
+       * - 本地/Docker 固定 IP 直连微信：`weixin`
+       * - Cloudflare 等无固定出口 IP 环境：`weixin-relay`
        */
       publisher: {
         provider: "weixin",
@@ -183,7 +192,8 @@ export default defineConfig({
       /**
        * 安全本地模式。
        *
-       * true: 只生成本地 HTML 到 `src/temp`，不上传图片、不发布到公众号。
+       * true: 只生成 HTML artifact，不上传图片、不发布到公众号。
+       * 本地/Docker 会写入 `src/temp`，Cloudflare 会写入 R2。
        * false: 上传图片并发布 / 创建微信公众号草稿。
        */
       dryRun: true,
@@ -228,29 +238,35 @@ export default defineConfig({
       /**
        * 文章向量去重。
        *
-       * 开启后会计算文章 embedding，并和 MySQL 中保存的历史向量做相似度对比。
+       * 开启后会计算文章 embedding，并和历史向量做相似度对比。
+       * 本地/Docker 默认使用 SQLite，Cloudflare 原生模式使用 D1。
+       * SQLite 会自动执行内置建表 SQL；Cloudflare D1 使用 migrations 目录。
        */
       deduplication: {
         enabled: false,
         embeddingProvider: "dashscope",
-        vectorStore: "mysql",
+        vectorStore: "sqlite",
       },
     },
   },
 
   /**
-   * 业务数据存储。
+   * 业务数据和运行产物存储。
    *
-   * 运行配置不会存到数据库。当前 MySQL 主要用于保存文章向量去重记录。
+   * 运行配置不会存到数据库。artifact/runState 支撑内置看板和 dry-run 产物。
    */
   storage: {
-    mysql: {
-      enabled: false,
-      host: "127.0.0.1",
-      port: 3306,
-      user: "root",
-      password: "",
-      database: "ai_trend_publish",
+    artifacts: {
+      provider: "local",
+      outputDir: "src/temp",
+    },
+    runState: {
+      provider: "local-json",
+      outputDir: "src/temp",
+    },
+    vector: {
+      provider: "sqlite",
+      sqlitePath: "src/temp/trendpublish.sqlite3",
     },
   },
 });

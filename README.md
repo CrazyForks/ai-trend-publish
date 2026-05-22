@@ -30,7 +30,8 @@ TrendPublish 是一个基于 Deno 和 TypeScript
 - 服务覆盖：大模型、数据源获取、图片生成、发布、通知和存储都按能力拆分，
   现在能直接使用，后续也方便继续补充。
 - 发布与调试：支持微信公众号草稿/发布接口，也支持 dry-run 输出本地 HTML。
-- 可选增强：支持 MySQL 向量去重，以及 Bark、钉钉、飞书工作流通知。
+- 可选增强：支持本地 SQLite / Cloudflare D1 向量去重，以及
+  Bark、钉钉、飞书工作流通知。
 
 ## 适合场景
 
@@ -162,9 +163,9 @@ features: {
 | 配置抓取策略   | `fetchGroups`                             | 分组内 provider 按顺序 fallback                                              |
 | 开启封面生图   | `features.article.cover`                  | 需要 `providers.image.dashscope.apiKey`                                      |
 | 开启正文配图   | `features.article.bodyImages`             | 失败时回退已有原文图片布局                                                   |
-| 开启向量去重   | `features.article.deduplication`          | 需要 embedding provider 和 MySQL                                             |
+| 开启向量去重   | `features.article.deduplication`          | 需要 embedding provider；本地/Docker 用 SQLite，Cloudflare 用 D1             |
 | 开启通知       | `features.article.notifications.channels` | 支持 Bark、钉钉、飞书                                                        |
-| 正式发布微信   | `features.article.dryRun: false`          | 需要微信公众号配置和 IP 白名单                                               |
+| 正式发布微信   | `features.article.dryRun: false`          | 本地固定 IP 用 `weixin`，Cloudflare 推荐 `weixin-relay`                      |
 
 完整字段说明见 [配置说明](docs/configuration.md)。
 
@@ -256,6 +257,7 @@ features: {
 
 - 微信公众号：[申请地址](https://mp.weixin.qq.com/)；配置
   `providers.publish.weixin.appId` 和 `providers.publish.weixin.appSecret`。
+- Cloudflare 真实发布推荐使用 `weixin-relay`，微信凭证只放在固定 IP 机器上。
 - 当前支持：封面上传、正文图片上传、草稿创建和发布。
 - 正式发布前需要在公众号后台配置 IP 白名单。
 - 后续：Twitter/X thread、Telegram、飞书文档、Notion、静态站点、Webhook。
@@ -263,10 +265,10 @@ features: {
 ### 去重、存储和通知
 
 - 向量去重：DashScope Embedding；常用模型为 `text-embedding-v3`。
-- 存储：当前使用 MySQL，配置 `storage.mysql`。
+- 存储：本地/Docker 使用文件和 SQLite；Cloudflare 原生模式使用 R2、KV、D1。
 - 通知：当前支持 Bark、钉钉机器人、飞书机器人。
-- 后续：OpenAI / Jina / BGE Embedding、PostgreSQL、SQLite、Cloudflare D1 /\
-  KV / R2、企业微信、Telegram、Slack、Discord、邮件通知。
+- 后续：OpenAI / Jina / BGE Embedding、PostgreSQL、SQLite、Vectorize、
+  企业微信、Telegram、Slack、Discord、邮件通知。
 
 ## 微信模板
 
@@ -304,6 +306,29 @@ deno task article:dry
 # 正式执行微信文章工作流
 deno task article
 
+# Docker 本地开发构建
+deno task docker:build
+
+# 固定 IP 机器上的微信发布中转服务
+deno task weixin:relay
+
+# Cloudflare Worker/Workflow 类型检查
+deno task cf:check
+
+# Cloudflare 打包 dry-run，不真正部署
+deno task cf:dry-run
+
+# Cloudflare 本地 D1 migration + 本地 Worker
+deno task cf:migrate:local
+deno task cf:dev
+
+# Cloudflare 远端 D1 migration + 部署
+deno task cf:migrate:remote
+deno task cf:deploy
+
+# 部署后健康检查和 dry-run 冒烟
+deno task cf:smoke --url https://your-worker.workers.dev --api-key your-api-key
+
 # 编译当前平台二进制
 deno task build
 
@@ -321,6 +346,7 @@ src/
   core/                        # workflow runtime、ports 和通用基础能力
   modules/                     # 内容排序、摘要、Markdown 转换等内部可复用能力
   platform/cloudflare/         # Cloudflare 可选部署入口
+  platform/local/              # 本地 artifact 和运行状态存储
   utils/config/                # TypeScript 配置定义、解析与校验
 ```
 
@@ -328,7 +354,7 @@ src/
 
 ## 发布与部署
 
-本地或服务器部署的推荐路径：
+本地或服务器直接运行：
 
 ```bash
 deno task doctor
@@ -336,13 +362,40 @@ deno task article:dry
 deno task dev
 ```
 
+Docker 推荐使用已经发布到 GHCR 的镜像：
+
+```bash
+docker pull ghcr.io/liyown/ai-trend-publish:latest
+docker compose up -d
+```
+
+容器默认读取 `/app/config/trendpublish.config.ts`，通常把本地
+`./config/trendpublish.config.ts` 挂载进去即可。镜像由 GitHub Actions 自动构建，
+不需要在服务器上本地构建。
+
+微信 relay 也是同一个镜像、同一个配置文件名，只是启动命令不同：
+
+```bash
+cp trendpublish.relay.config.example.ts config/trendpublish.config.ts
+deno task docker:relay:up
+```
+
+Cloudflare 提供 Worker / Workflows 原生入口，适合远程 HTTP 触发或 Cron
+定时发布。运行状态写入 KV/D1，文章产物和 dry-run HTML 写入 R2 或 KV
+fallback，并可通过 `/dashboard` 查看步骤、错误和产物。部署后可以用
+`deno task cf:smoke` 检查 `/api/health`、创建一次 dry-run
+Workflow，并轮询到最终结果。Cloudflare 真实发布 建议调用固定 IP 机器上的
+`weixin-relay`，避免微信 IP 白名单问题。
+
 正式发布微信公众号前，需要：
 
-1. 配置 `providers.publish.weixin.appId` 和
+1. 本地/Docker 直连发布：配置 `providers.publish.weixin.appId` 和
    `providers.publish.weixin.appSecret`。
-2. 在公众号后台配置服务器 IP 白名单。
-3. 先跑 `deno task article:dry` 检查正文和图片。
-4. 再设置 `features.article.dryRun: false` 并运行 `deno task article`。
+2. Cloudflare 发布：部署 `weixin-relay`，配置
+   `providers.publish.weixinRelay.url/token`。
+3. 在公众号后台配置固定 IP 机器的白名单。
+4. 先跑 dry-run 检查正文和图片。
+5. 再设置 `features.article.dryRun: false` 执行真实发布。
 
 部署细节见 [部署文档](docs/deployment.md)。
 

@@ -4,21 +4,37 @@
     "start": "deno run -A src/index.ts",
     "dev": "deno task start",
     "doctor": "deno run -A scripts/doctor.ts",
-    "check": "deno check src/index.ts scripts/run.workflow.ts scripts/preview.weixin.ts scripts/doctor.ts src/platform/cloudflare/worker.ts",
+    "check": "deno check src/index.ts src/apps/weixin-relay/server.ts scripts/run.workflow.ts scripts/preview.weixin.ts scripts/doctor.ts scripts/cloudflare-smoke.ts scripts/cloudflare-sync-secrets.ts src/platform/cloudflare/worker.ts",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "lint": "deno lint",
     "verify": "deno task fmt:check && deno task lint && deno task check && deno task test",
     "test": "deno task test:unit",
-    "test:unit": "deno test -A --no-check src/architecture-boundaries.test.ts src/release-readiness.test.ts src/utils/config/define-config.test.ts src/features/weixin-article/domain/article-source.test.ts src/app/weixin-article/fetch/article-fetch-planner.test.ts src/app/weixin-article/fetch/article-fetch-router.test.ts src/registry/provider-registry.test.ts src/core/workflow/local-workflow-runtime.test.ts src/utils/llm-output.test.ts src/modules/content-rank/ai.content-ranker.test.ts src/features/weixin-article/workflow.test.ts src/features/weixin-article/services/article-image-layout.service.test.ts src/features/weixin-article/services/article-render.service.test.ts src/features/weixin-article/services/content-scrape.service.test.ts src/features/weixin-article/rendering/dynamic src/features/weixin-article/rendering/test/test.weixin.dynamic.template.ts src/features/weixin-article/rendering/test/test.weixin.template.ts",
+    "test:unit": "deno test -A --no-check src/architecture-boundaries.test.ts src/release-readiness.test.ts src/utils/config/define-config.test.ts src/utils/config/app-config.test.ts src/core/storage/runtime-stores.test.ts src/integrations/vector/sqlite-vector-store.test.ts src/utils/image/image-processor.test.ts src/features/weixin-article/domain/article-source.test.ts src/app/weixin-article/fetch/article-fetch-planner.test.ts src/app/weixin-article/fetch/article-fetch-router.test.ts src/registry/provider-registry.test.ts src/core/workflow/local-workflow-runtime.test.ts src/utils/llm-output.test.ts src/modules/content-rank/ai.content-ranker.test.ts src/features/weixin-article/workflow.test.ts src/features/weixin-article/services/article-image-layout.service.test.ts src/features/weixin-article/services/article-render.service.test.ts src/features/weixin-article/services/content-scrape.service.test.ts src/features/weixin-article/rendering/dynamic src/features/weixin-article/rendering/test/test.weixin.dynamic.template.ts src/features/weixin-article/rendering/test/test.weixin.template.ts",
     "test:all": "deno task test:unit",
     "workflow": "deno run -A scripts/run.workflow.ts",
     "article": "deno task workflow",
     "article:dry": "deno task workflow --dry-run",
     "preview": "deno run -A scripts/preview.weixin.ts",
     "preview:weixin": "deno task preview",
+    "weixin:relay": "deno run -A src/apps/weixin-relay/server.ts",
     "run:article": "deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow",
     "run:article:dry": "deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow --dry-run",
+    "docker:build": "docker build -t trendpublish .",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f trendpublish",
+    "docker:relay:up": "docker compose -f docker-compose.relay.yml up -d",
+    "docker:relay:down": "docker compose -f docker-compose.relay.yml down",
+    "docker:relay:logs": "docker compose -f docker-compose.relay.yml logs -f weixin-relay",
+    "cf:check": "deno check src/platform/cloudflare/worker.ts",
+    "cf:dry-run": "deno run -A npm:wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cf:dev": "deno run -A npm:wrangler dev",
+    "cf:migrate:local": "deno run -A npm:wrangler d1 migrations apply ARTICLE_DB --local",
+    "cf:migrate:remote": "deno run -A npm:wrangler d1 migrations apply ARTICLE_DB --remote",
+    "cf:deploy": "deno run -A npm:wrangler deploy",
+    "cf:sync-secrets": "deno run -A scripts/cloudflare-sync-secrets.ts",
+    "cf:smoke": "deno run -A scripts/cloudflare-smoke.ts",
     "build": "deno compile -A --include src/features/weixin-article/rendering/templates --output trendFinder src/index.ts",
     "build:windows": "deno compile -A --target x86_64-pc-windows-msvc --output trendFinder.exe --icon ./docs/images/main.ico --include src/features/weixin-article/rendering/templates src/index.ts",
     "build:mac": "deno task build:mac-arm64",
@@ -37,13 +53,11 @@
   },
   "imports": {
     "@deno-library/progress": "jsr:@deno-library/progress@^1.5.1",
+    "@db/sqlite": "jsr:@db/sqlite@^0.12.0",
     "@std/assert": "jsr:@std/assert@1",
     "@src/": "./src/",
     "@zilla/logger": "jsr:@zilla/logger@^1.0.1",
-    "@sapling/markdown": "jsr:@sapling/markdown@^0.3.0",
-    "drizzle-kit": "npm:drizzle-kit@^0.30.5",
-    "drizzle-orm": "npm:drizzle-orm@^0.40.0",
-    "mysql2": "npm:mysql2@^3.13.0"
+    "@sapling/markdown": "jsr:@sapling/markdown@^0.3.0"
   },
   "exclude": [
     "node_modules",
@@ -55,9 +69,7 @@
   "lint": {
     "exclude": [
       "src/templates",
-      "src/features/weixin-article/rendering/templates",
-      "src/db/schema.ts",
-      "drizzle"
+      "src/features/weixin-article/rendering/templates"
     ],
     "rules": {
       "exclude": [

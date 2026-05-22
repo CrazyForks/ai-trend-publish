@@ -1,6 +1,9 @@
 node_modules
 .env
+.dev.vars
+cloudflare-token.local
 .vercel
+.wrangler/
 .devcontainer.json
 dist
 
@@ -43,12 +46,17 @@ Thumbs.db
 # Environment variables
 .env
 trendpublish.config.ts
+config/trendpublish.config.ts
 .env.local
 .env.*.local
 
 # Temp files
 temp/
 src/temp/
+data/temp/
 tmp/
 *.tmp
 *.bak
+*.sqlite
+*.sqlite3
+*.db

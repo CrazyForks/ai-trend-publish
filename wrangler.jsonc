@@ -4,10 +4,35 @@
   "main": "src/platform/cloudflare/worker.ts",
   "compatibility_date": "2026-05-21",
   "compatibility_flags": ["nodejs_compat"],
+  "alias": {
+    "@zilla/logger": "./src/platform/cloudflare/shims/logger.ts",
+    "jsr:@deno-library/progress": "./src/platform/cloudflare/shims/progress.ts",
+    "npm:axios": "axios",
+    "npm:ejs": "ejs",
+    "npm:fast-xml-parser": "fast-xml-parser",
+    "npm:firecrawl": "firecrawl",
+    "npm:openai": "openai",
+    "npm:zod": "zod",
+    "npm:zod@3.23.8": "zod"
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "kv_namespaces": [
+    {
+      "binding": "ARTICLE_RUNS",
+      "id": "eafc6388ba66410ba6c781460e42798c"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "ARTICLE_DB",
+      "database_name": "trendpublish-article-db",
+      "database_id": "f3aa498f-786e-4793-a1eb-c72049cd97ce",
+      "migrations_dir": "migrations"
+    }
+  ],
   "triggers": {
     "crons": ["0 19 * * *"]
   },

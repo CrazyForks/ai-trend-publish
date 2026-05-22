@@ -1,6 +1,5 @@
 // src/utils/image/image-processor.ts
 import { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
-import { decode, Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 
 interface ImageValidationResult {
   isValid: boolean;
@@ -8,10 +7,19 @@ interface ImageValidationResult {
   error?: string;
 }
 
+interface ImageDownloadResult extends ImageValidationResult {
+  imageBuffer?: ArrayBuffer;
+}
+
 interface ImageProcessResult {
   originalUrl: string;
   newUrl?: string;
   error?: string;
+}
+
+interface ExtractedImageUrl {
+  originalUrl: string;
+  fetchUrl: string;
 }
 
 export class WeixinImageProcessor {
@@ -41,8 +49,11 @@ export class WeixinImageProcessor {
     maxSizeInMB: number = 1,
   ): Promise<Uint8Array> {
     try {
+      const { decode } = await import(
+        "https://deno.land/x/imagescript@1.2.17/mod.ts"
+      );
       // 解码图片
-      const image = await decode(new Uint8Array(imageBuffer)) as Image;
+      const image = await decode(new Uint8Array(imageBuffer));
       const originalSize = imageBuffer.byteLength / (1024 * 1024); // 转换为MB
 
       // 根据原始大小决定压缩策略
@@ -95,20 +106,18 @@ export class WeixinImageProcessor {
     const results: ImageProcessResult[] = [];
     let processedContent = content;
 
-    for (const imageUrl of imageUrls) {
+    for (const image of imageUrls) {
       try {
-        const validationResult = await this.validateImage(imageUrl);
-        if (!validationResult.isValid) {
+        const downloadResult = await this.downloadImage(image.fetchUrl);
+        if (!downloadResult.isValid || !downloadResult.imageBuffer) {
           results.push({
-            originalUrl: imageUrl,
-            error: validationResult.error,
+            originalUrl: image.originalUrl,
+            error: downloadResult.error,
           });
           continue;
         }
 
-        // 下载图片
-        const response = await fetch(imageUrl);
-        const imageBuffer = await response.arrayBuffer();
+        const imageBuffer = downloadResult.imageBuffer;
 
         let processedImage: Uint8Array | undefined;
         if (imageBuffer.byteLength > WeixinImageProcessor.MAX_IMAGE_SIZE) {
@@ -125,25 +134,32 @@ export class WeixinImageProcessor {
 
         // 上传图片到微信
         const newUrl = await this.imageUploader.uploadContentImage(
-          imageUrl,
+          image.fetchUrl,
           processedImage ? processedImage : new Uint8Array(imageBuffer),
         );
 
         results.push({
-          originalUrl: imageUrl,
+          originalUrl: image.originalUrl,
           newUrl,
         });
 
         // 替换文章中的图片URL
         processedContent = this.replaceImageUrl(
           processedContent,
-          imageUrl,
+          image.originalUrl,
           newUrl,
         );
+        if (image.fetchUrl !== image.originalUrl) {
+          processedContent = this.replaceImageUrl(
+            processedContent,
+            image.fetchUrl,
+            newUrl,
+          );
+        }
       } catch (error) {
-        console.error(`处理图片失败: ${imageUrl}`, error);
+        console.error(`处理图片失败: ${image.originalUrl}`, error);
         results.push({
-          originalUrl: imageUrl,
+          originalUrl: image.originalUrl,
           error: error instanceof Error ? error.message : "未知错误",
         });
       }
@@ -158,30 +174,39 @@ export class WeixinImageProcessor {
   /**
    * 从文章内容中提取所有图片URL
    */
-  private extractImageUrls(content: string): string[] {
-    const urls = new Set<string>();
+  private extractImageUrls(content: string): ExtractedImageUrl[] {
+    const urls = new Map<string, ExtractedImageUrl>();
     const patterns = {
       markdown: /!\[[^\]]*\]\(([^)]+)\)/g,
       html: /<img[^>]+src=["']([^"']+)["'][^>]*>/g,
-      plainUrl:
-        /(https?:\/\/[^\s<>"]+?\/[^\s<>"]+?\.(jpg|jpeg|png|gif|webp))/gi,
     };
 
-    // 提取各种格式的图片URL
     for (const [_, pattern] of Object.entries(patterns)) {
       let match;
       while ((match = pattern.exec(content)) !== null) {
-        urls.add(match[1]);
+        this.addExtractedImageUrl(urls, match[1]);
       }
     }
 
-    return Array.from(urls);
+    const contentWithoutTaggedImages = content
+      .replace(patterns.markdown, " ")
+      .replace(patterns.html, " ");
+    const plainUrlPattern =
+      /(https?:\/\/[^\s<>"]+?\/[^\s<>"]+?\.(jpg|jpeg|png|gif|webp)(?:\?[^\s<>"]+)?)\b/gi;
+    let match;
+    while (
+      (match = plainUrlPattern.exec(contentWithoutTaggedImages)) !== null
+    ) {
+      this.addExtractedImageUrl(urls, match[1]);
+    }
+
+    return Array.from(urls.values());
   }
 
   /**
-   * 验证图片URL是否有效
+   * 下载并验证图片URL是否有效
    */
-  private async validateImage(url: string): Promise<ImageValidationResult> {
+  private async downloadImage(url: string): Promise<ImageDownloadResult> {
     try {
       const urlObj = new URL(url);
       const extension = urlObj.pathname.toLowerCase().split(".").pop();
@@ -196,7 +221,14 @@ export class WeixinImageProcessor {
         };
       }
 
-      const response = await fetch(url, { method: "HEAD" });
+      const response = await fetch(url);
+      if (!response.ok) {
+        return {
+          isValid: false,
+          error: `图片下载失败: HTTP ${response.status}`,
+        };
+      }
+
       const contentType = response.headers.get("content-type");
 
       if (!contentType || !contentType.startsWith("image/")) {
@@ -209,6 +241,7 @@ export class WeixinImageProcessor {
       return {
         isValid: true,
         contentType,
+        imageBuffer: await response.arrayBuffer(),
       };
     } catch (error) {
       return {
@@ -245,4 +278,25 @@ export class WeixinImageProcessor {
   private escapeRegExp(string: string): string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
+
+  private addExtractedImageUrl(
+    urls: Map<string, ExtractedImageUrl>,
+    originalUrl: string,
+  ): void {
+    const fetchUrl = decodeHtmlEntities(originalUrl.trim());
+    if (!fetchUrl || urls.has(fetchUrl)) {
+      return;
+    }
+    urls.set(fetchUrl, { originalUrl, fetchUrl });
+  }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }

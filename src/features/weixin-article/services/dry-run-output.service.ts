@@ -1,21 +1,23 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import type {
+  ArtifactRef,
+  ArtifactStore,
+} from "@src/core/ports/artifact-store.ts";
 
 export class WeixinArticleDryRunOutputService {
+  constructor(private readonly artifactStore: ArtifactStore) {}
+
   public async writeHtml(
+    runId: string,
     renderedTemplate: string,
-    outputDir?: string,
-  ): Promise<string> {
-    const tempDir = outputDir || join(Deno.cwd(), "src/temp");
-    mkdirSync(tempDir, { recursive: true });
-    const outputPath = join(
-      tempDir,
-      `dry_run_weixin_article_${
-        new Date().toISOString().replace(/[:.]/g, "-")
-      }.html`,
+  ): Promise<ArtifactRef> {
+    return await this.artifactStore.putText(
+      this.artifactStore.createRunKey(runId, "dry-run-preview", "html"),
+      wrapPreviewHtml(renderedTemplate),
+      {
+        label: "Dry-run HTML 预览",
+        contentType: "text/html; charset=utf-8",
+      },
     );
-    await Deno.writeTextFile(outputPath, wrapPreviewHtml(renderedTemplate));
-    return outputPath;
   }
 }
 

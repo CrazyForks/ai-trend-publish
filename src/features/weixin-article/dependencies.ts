@@ -1,6 +1,9 @@
 import { ContentRanker } from "@src/modules/content-rank/ai.content-ranker.ts";
 import { INotifier } from "@src/core/ports/notifier.ts";
-import { ContentPublisher } from "@src/core/ports/content-publisher.ts";
+import {
+  ContentImageUploader,
+  ContentPublisher,
+} from "@src/core/ports/content-publisher.ts";
 import { WeixinArticleContentDedupService } from "@src/features/weixin-article/services/content-dedup.service.ts";
 import { WeixinArticleContentProcessService } from "@src/features/weixin-article/services/content-process.service.ts";
 import { WeixinArticleContentScrapeService } from "@src/features/weixin-article/services/content-scrape.service.ts";
@@ -10,9 +13,21 @@ import { WeixinArticleRenderService } from "@src/features/weixin-article/service
 import { WeixinArticleTitleService } from "@src/features/weixin-article/services/article-title.service.ts";
 import { WeixinArticleWorkflowStats } from "@src/features/weixin-article/services/workflow-stats.ts";
 import type { WeixinArticleWorkflowConfig } from "@src/features/weixin-article/workflow.ts";
+import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
+import type {
+  RunStateStore,
+  RuntimeMode,
+} from "@src/core/ports/run-state-store.ts";
 
-export interface WeixinArticlePublisher extends ContentPublisher {
+export interface WeixinArticlePublisher
+  extends ContentPublisher, ContentImageUploader {
   validateIpWhitelist(): Promise<string | boolean>;
+}
+
+export interface WeixinArticleRuntimeDependencies {
+  artifactStore: ArtifactStore;
+  runStateStore: RunStateStore;
+  mode: RuntimeMode;
 }
 
 export interface WeixinArticleDependencies {
@@ -27,5 +42,6 @@ export interface WeixinArticleDependencies {
   dryRunOutputService: WeixinArticleDryRunOutputService;
   contentRanker: ContentRanker;
   stats: WeixinArticleWorkflowStats;
+  runtime: WeixinArticleRuntimeDependencies;
   config: WeixinArticleWorkflowConfig;
 }

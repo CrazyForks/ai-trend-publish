@@ -9,6 +9,17 @@
 - 路径：`POST /api/workflow`
 - 默认地址：`http://localhost:8000/api/workflow`
 
+新看板和自动化建议优先使用 REST 入口：
+
+- `GET /dashboard`
+- `GET /api/health`
+- `POST /api/runs`
+- `GET /api/runs`
+- `GET /api/runs/:runId`
+- `GET /api/artifacts?key=...`
+
+`POST /api/workflow` 继续保留，用于兼容旧调用。
+
 ## 认证
 
 请求必须带 Bearer Token：
@@ -18,6 +29,34 @@ Authorization: Bearer <server.apiKey>
 ```
 
 `server.apiKey` 来自 `trendpublish.config.ts`。
+
+## REST 冒烟检查
+
+`GET /api/health` 用于检查 Cloudflare 绑定和配置是否可用：
+
+```bash
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-worker.workers.dev/api/health
+```
+
+返回值会包含 `config`、`kv`、`d1`、`r2` 等检查项。任一检查失败时 HTTP 状态为
+`500`，方便部署后快速定位是配置、binding 还是存储资源问题。
+
+触发一次 dry-run：
+
+```bash
+curl -X POST https://your-worker.workers.dev/api/runs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{"dryRun": true, "trigger": "manual", "maxArticles": 1}'
+```
+
+查询运行详情：
+
+```bash
+curl -H "Authorization: Bearer your-api-key" \
+  https://your-worker.workers.dev/api/runs/<runId>
+```
 
 ## 请求示例
 

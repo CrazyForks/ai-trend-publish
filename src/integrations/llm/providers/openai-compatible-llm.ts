@@ -49,13 +49,8 @@ export class OpenAICompatibleLLM implements LLMProvider {
       throw new Error("providers.ai.apiKey is not set");
     }
 
-    // 检查API服务是否可用
-    const isHealthy = await this.httpClient.healthCheck(this.baseURL);
-    if (!isHealthy) {
-      console.warn(
-        `警告: LLM服务 ${this.baseURL} 健康检查失败，可能无法正常访问`,
-      );
-    }
+    // 不在初始化阶段做网络健康检查。部分模型网关不支持 HEAD，
+    // Cloudflare Workflow 也不适合在进入业务 step 前等待外部探测。
   }
 
   /**

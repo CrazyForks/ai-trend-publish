@@ -5,7 +5,11 @@ import { EmbeddingProviderType } from "@src/core/ports/embedding.ts";
 import { imageGeneratorRegistry } from "@src/integrations/image/image-generator-registry.ts";
 import { llmProviderRegistry } from "@src/integrations/llm/llm-provider-registry.ts";
 import { embeddingProviderRegistry } from "@src/integrations/vector/embedding-provider-registry.ts";
-import { getAppConfig } from "@src/utils/config/app-config.ts";
+import {
+  getAppConfig,
+  initializeAppConfig,
+  parseConfigArgs,
+} from "@src/utils/config/app-config.ts";
 import {
   ArticleNotificationChannel,
   ResolvedTrendPublishConfig,
@@ -66,14 +70,20 @@ function checkDenoVersion() {
   );
 }
 
-function checkFiles() {
+function checkFiles(configPath?: string) {
+  const runtime = Deno.env.get("TRENDPUBLISH_RUNTIME");
+  const actualConfigPath = configPath ?? Deno.env.get("TRENDPUBLISH_CONFIG") ??
+    "trendpublish.config.ts";
   const files = [
-    "trendpublish.config.ts",
+    actualConfigPath,
     "src/index.ts",
     "scripts/run.workflow.ts",
     "src/app/weixin-article/workflow.definition.ts",
     "src/platform/cloudflare/worker.ts",
+    "trendpublish.config.cloudflare.ts",
     "wrangler.jsonc",
+    "migrations/0001_article_workflow_state.sql",
+    "src/features/weixin-article/rendering/template-registry.ts",
     "src/features/weixin-article/rendering/templates/article.ejs",
     "src/features/weixin-article/rendering/templates/article.modern.ejs",
     "src/features/weixin-article/rendering/templates/article.tech.ejs",
@@ -83,6 +93,18 @@ function checkFiles() {
     "src/features/weixin-article/rendering/templates/article.product.ejs",
     "src/features/weixin-article/rendering/templates/article.darktech.ejs",
   ];
+
+  if (runtime !== "docker") {
+    files.push(
+      "Dockerfile",
+      ".dockerignore",
+      "docker-compose.yml",
+      "docker-compose.relay.yml",
+      "trendpublish.config.docker.example.ts",
+      "trendpublish.relay.config.example.ts",
+      ".github/workflows/docker-image.yml",
+    );
+  }
 
   for (const file of files) {
     const exists = existsSync(file);
@@ -107,7 +129,7 @@ function checkFiles() {
     "warn",
     "部署",
     "Cloudflare Worker",
-    "当前提供类型可检查的 Worker 入口；真实部署仍需要按环境配置 wrangler bindings、secrets 和远程存储。",
+    "Cloudflare 原生模式需要配置 R2(ARTICLE_ARTIFACTS)、KV(ARTICLE_RUNS)、D1(ARTICLE_DB)、Workflow binding 和 secrets；本地 doctor 只做文件和配置结构检查。",
   );
 }
 
@@ -127,20 +149,6 @@ function checkRequired(
       ? `已配置: ${fields.map(([path]) => path).join(", ")}`
       : `缺少: ${missing.join(", ")}`,
   );
-}
-
-function checkFeature(
-  group: string,
-  name: string,
-  enabled: boolean,
-  required: [path: string, value: unknown][],
-  detail: string,
-) {
-  if (!enabled) {
-    add("warn", group, name, `未开启。${detail}`);
-    return;
-  }
-  checkRequired(group, name, required);
 }
 
 function checkProvider(
@@ -194,19 +202,41 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
     ],
   ]);
 
-  checkRequired(
-    "微信发布",
-    config.features.article.dryRun
-      ? "微信公众号配置(dry-run)"
-      : "微信公众号配置",
-    config.features.article.dryRun ? [] : [
-      ["providers.publish.weixin.appId", config.providers.publish.weixin.appId],
-      [
-        "providers.publish.weixin.appSecret",
-        config.providers.publish.weixin.appSecret,
+  if (config.features.article.publisher.provider === "weixin") {
+    checkRequired(
+      "微信发布",
+      config.features.article.dryRun
+        ? "微信公众号配置(dry-run)"
+        : "微信公众号配置",
+      config.features.article.dryRun ? [] : [
+        [
+          "providers.publish.weixin.appId",
+          config.providers.publish.weixin.appId,
+        ],
+        [
+          "providers.publish.weixin.appSecret",
+          config.providers.publish.weixin.appSecret,
+        ],
       ],
-    ],
-  );
+    );
+  } else {
+    checkRequired(
+      "微信发布",
+      config.features.article.dryRun
+        ? "微信 Relay 配置(dry-run)"
+        : "微信 Relay 配置",
+      config.features.article.dryRun ? [] : [
+        [
+          "providers.publish.weixinRelay.url",
+          config.providers.publish.weixinRelay.url,
+        ],
+        [
+          "providers.publish.weixinRelay.token",
+          config.providers.publish.weixinRelay.token,
+        ],
+      ],
+    );
+  }
 
   add(
     "pass",
@@ -251,39 +281,43 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
     "开启后会按文章内容生成正文配图，失败时回退已有 media 图片布局。",
   );
 
+  const dedupVectorStore = config.features.article.deduplication.vectorStore;
+  const dedupUsesSqlite = dedupVectorStore === "sqlite";
   checkProviderFeature(
     "内容去重",
-    `向量去重 (${config.features.article.deduplication.embeddingProvider} + ${config.features.article.deduplication.vectorStore})`,
+    `向量去重 (${config.features.article.deduplication.embeddingProvider} + ${dedupVectorStore})`,
     config.features.article.deduplication.enabled,
     embeddingProviderRegistry.get(EmbeddingProviderType.DASHSCOPE)
       .isConfigured(config) &&
-      hasValue(config.storage.mysql.host) &&
-      hasValue(config.storage.mysql.user) &&
-      hasValue(config.storage.mysql.password) &&
-      hasValue(config.storage.mysql.database),
-    [
-      "providers.vector.embedding.baseUrl",
-      "providers.vector.embedding.apiKey",
-      "providers.vector.embedding.model",
-      "storage.mysql.host",
-      "storage.mysql.user",
-      "storage.mysql.password",
-      "storage.mysql.database",
-    ],
-    "开启后会用 embedding 计算相似度，并把向量写入数据库。",
+      (dedupUsesSqlite
+        ? hasValue(config.storage.vector.sqlitePath)
+        : hasValue(config.storage.vector.d1Binding)),
+    dedupUsesSqlite
+      ? [
+        "providers.vector.embedding.baseUrl",
+        "providers.vector.embedding.apiKey",
+        "providers.vector.embedding.model",
+        "storage.vector.sqlitePath",
+      ]
+      : [
+        "providers.vector.embedding.baseUrl",
+        "providers.vector.embedding.apiKey",
+        "providers.vector.embedding.model",
+        "storage.vector.d1Binding",
+      ],
+    "开启后会用 embedding 计算相似度，并把向量写入配置的 vector store。",
   );
 
-  checkFeature(
+  add(
+    hasValue(config.storage.vector.sqlitePath) ||
+      hasValue(config.storage.vector.d1Binding)
+      ? "pass"
+      : "fail",
     "数据库",
-    "MySQL",
-    config.storage.mysql.enabled,
-    [
-      ["storage.mysql.host", config.storage.mysql.host],
-      ["storage.mysql.user", config.storage.mysql.user],
-      ["storage.mysql.password", config.storage.mysql.password],
-      ["storage.mysql.database", config.storage.mysql.database],
-    ],
-    "用于保存向量去重数据，不再存放运行配置或业务数据源。",
+    "向量存储",
+    config.storage.vector.provider === "sqlite"
+      ? `SQLite: ${config.storage.vector.sqlitePath}`
+      : `D1 binding: ${config.storage.vector.d1Binding}`,
   );
 
   checkNotificationChannels(config);
@@ -368,8 +402,10 @@ function printResults() {
   }
 }
 
+const parsedConfigArgs = parseConfigArgs(Deno.args);
+await initializeAppConfig({ configPath: parsedConfigArgs.configPath });
 const config = await getAppConfig();
 checkDenoVersion();
-checkFiles();
+checkFiles(parsedConfigArgs.configPath);
 checkConfig(config);
 printResults();

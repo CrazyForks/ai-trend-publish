@@ -73,9 +73,27 @@ deno task preview
 deno task article:dry
 ```
 
-默认会启动在 `http://localhost:8000`，并暴露 `POST /api/workflow`。
+默认会启动在 `http://localhost:8000`，并提供：
 
-## 5. 触发一次工作流
+- `GET /dashboard`：运行看板。
+- `POST /api/runs`：触发微信文章工作流。
+- `POST /api/workflow`：旧 JSON-RPC 兼容入口。
+
+## 5. Docker 启动
+
+也可以直接使用发布镜像：
+
+```bash
+mkdir -p config data/temp
+cp trendpublish.config.docker.example.ts config/trendpublish.config.ts
+docker compose up -d
+```
+
+Docker 会读取 `./config/trendpublish.config.ts`，dry-run 输出、运行状态和
+artifact 会写到 `./data/temp`，可通过 `/dashboard` 查看。更多部署细节见
+[部署文档](/deployment)。
+
+## 6. 触发一次工作流
 
 ```bash
 curl -X POST http://localhost:8000/api/workflow \
@@ -89,10 +107,10 @@ curl -X POST http://localhost:8000/api/workflow \
       "dryRun": true
     },
     "id": 1
-  }'
+}'
 ```
 
-## 6. 文档开发（VitePress）
+## 7. 文档开发（VitePress）
 
 ```bash
 npm install
@@ -100,7 +118,7 @@ npm run docs:dev
 npm run docs:build
 ```
 
-## 7. 常用构建命令
+## 8. 常用构建命令
 
 ```bash
 # Windows

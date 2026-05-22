@@ -9,8 +9,52 @@ deno task doctor
 ```
 
 运行配置只从 `trendpublish.config.ts`
-读取。数据库只保存业务数据，例如向量去重数据，不再保存运行配置。`doctor`
-会按功能块检查缺失项，并把 `your_api_key`、`change-me` 这类占位值视为未配置。
+读取。数据库只保存运行历史、步骤明细、发布结果和向量去重记录，不再保存运行配置。
+`doctor` 会按功能块检查缺失项，并把 `your_api_key`、`change-me`
+这类占位值视为未配置。
+
+## 配置文件路径
+
+默认读取当前目录的 `trendpublish.config.ts`。需要切换配置文件时，可以显式指定：
+
+```bash
+deno task doctor --config ./config/trendpublish.config.ts
+deno task article:dry --config ./config/trendpublish.config.ts
+deno task dev --config ./config/trendpublish.config.ts
+```
+
+也可以设置 `TRENDPUBLISH_CONFIG` 指向配置文件。Docker 镜像默认读取
+`/app/config/trendpublish.config.ts`。
+
+## 运行时配置函数
+
+配置仍然是 TypeScript 结构。如果部署环境里的密钥或地址需要动态注入，可以把
+`defineConfig` 写成函数：
+
+```ts
+import { defineConfig } from "./src/utils/config/define-config.ts";
+
+export default defineConfig((runtime) => ({
+  server: {
+    apiKey: runtime.required("SERVER_API_KEY"),
+  },
+  providers: {
+    ai: {
+      baseUrl: runtime.value("AI_BASE_URL", "https://api.deepseek.com/v1"),
+      apiKey: runtime.required("AI_API_KEY"),
+      model: runtime.value("AI_MODEL", "deepseek-chat"),
+    },
+  },
+  features: {
+    article: {
+      dryRun: true,
+      sources: ["https://news.ycombinator.com/"],
+    },
+  },
+}));
+```
+
+这样只有“哪些值从运行时来”是显式的，不会出现通用覆盖规则导致配置来源混乱。
 
 ## 最小配置
 
@@ -37,7 +81,7 @@ export default defineConfig({
 });
 ```
 
-如果要正式发布到微信公众号，还必须填：
+如果要在固定 IP 的本地服务器或 Docker 里直连微信公众号，还必须填：
 
 ```ts
 providers: {
@@ -50,25 +94,89 @@ providers: {
 }
 ```
 
+如果是 Cloudflare Worker / Workflows 这类没有固定出口 IP 的环境，推荐发布到 固定
+IP 机器上的 `weixin-relay`，Cloudflare 配置里只放 relay 地址和 token：
+
+```ts
+providers: {
+  publish: {
+    weixinRelay: {
+      url: "https://relay.example.com",
+      token: "your_relay_token",
+    },
+  },
+},
+features: {
+  article: {
+    publisher: { provider: "weixin-relay" },
+    dryRun: false,
+  },
+},
+```
+
 ## 功能开关与必需配置
 
-| 想开启的功能            | TS 配置位置                                                                         | 说明                                       |
-| ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------ |
-| 启动 JSON-RPC 服务      | `server.apiKey`                                                                     | API 请求需带 `Authorization: Bearer <key>` |
-| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                    | 使用 OpenAI Chat Completions 兼容接口      |
-| 本地模板预览            | `features.article.renderer.template`                                                | 静态模板不依赖公众号配置                   |
-| 提示词风格              | `features.article.renderer.promptProfile`                                           | 控制排序、摘要、标题、动态排版和配图口径   |
-| 微信文章 dry-run        | `features.article.dryRun: true`                                                     | 不发布、不上传图片，会输出本地 HTML        |
-| 微信公众号正式发布      | `providers.publish.weixin.appId`, `providers.publish.weixin.appSecret`              | 还需要公众号后台 IP 白名单                 |
-| 文章数据源              | `features.article.sources`                                                          | URL 列表，可用抓取分组前缀                 |
-| 抓取供应商              | `providers.fetch.*`                                                                 | FireCrawl、Twitter/X、Xquik、Jina、RSS     |
-| 阿里云封面生图          | `features.article.cover`, `providers.image.dashscope.apiKey`                        | 未配置或失败时使用兜底封面                 |
-| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片 |
-| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.mysql.*` | 当前文章去重会写入 MySQL                   |
-| 数据库业务数据          | `storage.mysql.enabled`                                                             | 保存向量去重等业务数据                     |
-| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                  | channels 中包含 `bark` 时检查 Bark URL     |
-| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`              | channels 中包含 `dingtalk` 时检查 webhook  |
-| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                | channels 中包含 `feishu` 时检查 webhook    |
+| 想开启的功能            | TS 配置位置                                                                                 | 说明                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 启动 JSON-RPC 服务      | `server.apiKey`                                                                             | API 请求需带 `Authorization: Bearer <key>`         |
+| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                            | 使用 OpenAI Chat Completions 兼容接口              |
+| 本地模板预览            | `features.article.renderer.template`                                                        | 静态模板不依赖公众号配置                           |
+| 提示词风格              | `features.article.renderer.promptProfile`                                                   | 控制排序、摘要、标题、动态排版和配图口径           |
+| 微信文章 dry-run        | `features.article.dryRun: true`                                                             | 不发布，本地输出 HTML，Cloudflare 输出 R2 artifact |
+| 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin` 或 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay      |
+| 文章数据源              | `features.article.sources`                                                                  | URL 列表，可用抓取分组前缀                         |
+| 抓取供应商              | `providers.fetch.*`                                                                         | FireCrawl、Twitter/X、Xquik、Jina、RSS             |
+| 阿里云封面生图          | `features.article.cover`, `providers.image.dashscope.apiKey`                                | 未配置或失败时使用兜底封面                         |
+| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope.apiKey`                           | 按文章内容生成正文配图，失败时回退已有图片         |
+| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`        | 本地/Docker 用 SQLite，Cloudflare 用 D1            |
+| 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                     | 本地写文件，Cloudflare 使用 R2/KV/D1               |
+| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                          | channels 中包含 `bark` 时检查 Bark URL             |
+| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                      | channels 中包含 `dingtalk` 时检查 webhook          |
+| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                        | channels 中包含 `feishu` 时检查 webhook            |
+
+## 运行产物与看板存储
+
+本地/Docker 默认配置无需手动填写：
+
+```ts
+storage: {
+  artifacts: {
+    provider: "local",
+    outputDir: "src/temp",
+  },
+  runState: {
+    provider: "local-json",
+    outputDir: "src/temp",
+  },
+  vector: {
+    provider: "sqlite",
+    sqlitePath: "src/temp/trendpublish.sqlite3",
+  },
+},
+```
+
+Cloudflare Workflow 原生模式使用 bindings：
+
+```ts
+storage: {
+  artifacts: {
+    provider: "r2",
+    bucketBinding: "ARTICLE_ARTIFACTS",
+  },
+  runState: {
+    provider: "kv-d1",
+    kvBinding: "ARTICLE_RUNS",
+    d1Binding: "ARTICLE_DB",
+  },
+  vector: {
+    provider: "d1",
+    d1Binding: "ARTICLE_DB",
+  },
+},
+```
+
+`/dashboard` 会读取同一套 run state 和 artifact，因此本地和 Cloudflare
+都能查看步骤、错误、耗时和 HTML 产物。
 
 ## 推荐配置路径
 
@@ -215,21 +323,22 @@ features: {
     deduplication: {
       enabled: true,
       embeddingProvider: "dashscope",
-      vectorStore: "mysql",
+      vectorStore: "sqlite",
     },
   },
 },
 storage: {
-  mysql: {
-    enabled: true,
-    host: "localhost",
-    port: 3306,
-    user: "root",
-    password: "your_password",
-    database: "trendfinder",
+  vector: {
+    provider: "sqlite",
+    sqlitePath: "src/temp/trendpublish.sqlite3",
   },
 },
 ```
+
+SQLite 也需要建表，但你不需要手工执行。Local/Docker 首次使用 `SQLiteVectorStore`
+时会自动执行内置建表 SQL。Cloudflare D1 使用
+`migrations/0001_article_workflow_state.sql`，通过 `deno task cf:migrate:remote`
+应用到远端，或通过 `deno task cf:migrate:local` 应用到本地 Wrangler dev 数据库。
 
 ### 7. 开启工作流通知
 
@@ -316,7 +425,6 @@ features: {
 
 - 每次改完 `trendpublish.config.ts` 后先跑 `deno task doctor`。
 - 先跑 `deno task preview`，再跑 `deno task article:dry`，最后再正式发布。
-- 新环境建议先关闭
-  `storage.mysql.enabled`、`features.article.deduplication.enabled`
+- 新环境建议先关闭 `features.article.deduplication.enabled`
   和通知，跑通主链路后再逐项开启。
 - 本地真实的 `trendpublish.config.ts` 已加入 `.gitignore`，不要提交真实密钥。

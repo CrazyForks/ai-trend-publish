@@ -45,8 +45,8 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
     this.appId = provider.appId;
     this.appSecret = provider.appSecret;
     logger.debug("微信公众号配置:", {
-      appId: this.appId,
-      appSecret: this.appSecret,
+      appId: maskSecret(this.appId),
+      appSecret: maskSecret(this.appSecret),
     });
   }
 
@@ -289,4 +289,10 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
     }
     return this.configuredProvider;
   }
+}
+
+function maskSecret(value: string | undefined): string {
+  if (!value) return "";
+  if (value.length <= 8) return "****";
+  return `${value.slice(0, 4)}****${value.slice(-4)}`;
 }

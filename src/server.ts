@@ -1,6 +1,10 @@
 import { triggerWorkflow } from "./controllers/workflow.controller.ts";
 import { WorkflowType } from "./controllers/cron.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
+import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
+import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
+import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
+import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
 
 export interface JSONRPCRequest {
   jsonrpc: string;
@@ -104,27 +108,131 @@ export class JSONRPCServer {
 const rpcServer = new JSONRPCServer();
 rpcServer.registerRoute("triggerWorkflow", triggerWorkflow);
 
+async function verifyRequestAuth(req: Request): Promise<Response | null> {
+  const API_KEY = (await getAppConfig()).server.apiKey;
+  const authHeader = req.headers.get("Authorization");
+  if (
+    !authHeader || !authHeader.startsWith("Bearer ") ||
+    authHeader.split(" ")[1] !== API_KEY
+  ) {
+    return jsonResponse({
+      error: {
+        code: -32001,
+        message: "未授权的访问",
+        data: {
+          error: "缺少有效的 Authorization 请求头",
+        },
+      },
+    }, 401);
+  }
+  return null;
+}
+
+function jsonResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function handleRunsRequest(req: Request, pathname: string) {
+  const unauthorized = await verifyRequestAuth(req);
+  if (unauthorized) return unauthorized;
+
+  const config = await getAppConfig();
+  const stores = createLocalArticleRuntimeStores(config);
+
+  if (req.method === "POST" && pathname === "/api/runs") {
+    const payload = await req.json().catch(() => ({})) as Record<string, any>;
+    const runId = payload.runId ?? `manual-${crypto.randomUUID()}`;
+    const runtime = new LocalWorkflowRuntime();
+    await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
+      payload: {
+        ...payload,
+        runId,
+        trigger: "manual",
+      },
+      id: runId,
+      timestamp: Date.now(),
+    });
+    return jsonResponse({ success: true, runId });
+  }
+
+  if (req.method === "GET" && pathname === "/api/runs") {
+    const runs = await stores.runStateStore.listRuns(50);
+    return jsonResponse({ runs });
+  }
+
+  const runMatch = pathname.match(/^\/api\/runs\/([^/]+)$/);
+  if (req.method === "GET" && runMatch) {
+    const run = await stores.runStateStore.getRun(
+      decodeURIComponent(runMatch[1]),
+    );
+    if (!run) {
+      return jsonResponse({ error: "run 不存在" }, 404);
+    }
+    return jsonResponse({ run });
+  }
+
+  return jsonResponse({ error: "无效的 runs API" }, 404);
+}
+
+async function handleArtifactRequest(req: Request): Promise<Response> {
+  const unauthorized = await verifyRequestAuth(req);
+  if (unauthorized) return unauthorized;
+
+  const url = new URL(req.url);
+  const key = url.searchParams.get("key");
+  if (!key) {
+    return jsonResponse({ error: "缺少 key 参数" }, 400);
+  }
+  const config = await getAppConfig();
+  const stores = createLocalArticleRuntimeStores(config);
+  const object = await stores.artifactStore.getObject(key);
+  if (!object) {
+    return jsonResponse({ error: "artifact 不存在" }, 404);
+  }
+  return new Response(
+    toArrayBuffer(object.body),
+    {
+      headers: {
+        "Content-Type": object.ref.contentType,
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
+
+function toArrayBuffer(value: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(value.byteLength);
+  new Uint8Array(buffer).set(value);
+  return buffer;
+}
+
 // 请求处理器
 const handler = async (req: Request): Promise<Response> => {
   try {
-    // 验证 Authorization 请求头
-    const API_KEY = (await getAppConfig()).server.apiKey;
+    const url = new URL(req.url);
+    if (req.method === "GET" && url.pathname === "/dashboard") {
+      return new Response(renderDashboardHtml(), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+    if (url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")) {
+      return await handleRunsRequest(req, url.pathname);
+    }
+    if (url.pathname === "/api/artifacts") {
+      return await handleArtifactRequest(req);
+    }
 
-    const authHeader = req.headers.get("Authorization");
-    if (
-      !authHeader || !authHeader.startsWith("Bearer ") ||
-      authHeader.split(" ")[1] !== API_KEY
-    ) {
+    // 验证 Authorization 请求头
+    const unauthorized = await verifyRequestAuth(req);
+    if (unauthorized) {
+      const body = await unauthorized.json();
       return new Response(
         JSON.stringify({
           jsonrpc: "2.0",
-          error: {
-            code: -32001,
-            message: "未授权的访问",
-            data: {
-              error: "缺少有效的 Authorization 请求头",
-            },
-          },
+          error: body.error,
         }),
         {
           status: 401,
@@ -134,8 +242,6 @@ const handler = async (req: Request): Promise<Response> => {
         },
       );
     }
-
-    const url = new URL(req.url);
 
     // 规范化路径（移除开头和结尾的斜杠，处理可能的错误格式）
     const normalizedPath = url.pathname.replace(/^\/+|\/+$/g, "");

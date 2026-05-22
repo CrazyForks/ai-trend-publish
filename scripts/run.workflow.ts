@@ -1,8 +1,9 @@
 import { WorkflowType } from "@src/controllers/cron.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
-import { createWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/workflow.definition.ts";
+import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
 import {
   initializeAppConfig,
+  parseConfigArgs,
   shutdownAppResources,
   validateAppConfig,
 } from "@src/utils/config/app-config.ts";
@@ -83,6 +84,7 @@ function printHelp() {
   deno run -A scripts/run.workflow.ts --workflow weixin-article-workflow --dry-run --max-articles 5
 
 参数:
+  --config <path>       指定配置文件路径，优先级高于 TRENDPUBLISH_CONFIG
   --workflow <type>       兼容旧命令，仅支持 weixin-article-workflow
   --dry-run              跑完整流程但不上传封面/正文图，也不发布
   --dry-run-output <dir> dry-run HTML 输出目录
@@ -92,24 +94,30 @@ function printHelp() {
 `);
 }
 
-const options = parseArgs(Deno.args);
+const parsedConfigArgs = parseConfigArgs(Deno.args);
+const options = parseArgs(parsedConfigArgs.args);
 try {
-  await initializeAppConfig();
+  await initializeAppConfig({ configPath: parsedConfigArgs.configPath });
   await validateAppConfig({
     requireLLM: true,
     requireWeixinPublish: !options.dryRun,
   });
 
   const runtime = new LocalWorkflowRuntime();
-  await runtime.run(createWeixinArticleWorkflowDefinition(), {
+  const runId = options.dryRun
+    ? `manual-dry-run-${crypto.randomUUID()}`
+    : `manual-run-${crypto.randomUUID()}`;
+  await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
     payload: {
+      runId,
+      trigger: "manual",
       dryRun: options.dryRun,
       dryRunOutputDir: options.dryRunOutputDir,
       maxArticles: options.maxArticles,
       sourceType: options.sourceType,
       forcePublish: options.forcePublish,
     },
-    id: options.dryRun ? "manual-dry-run" : "manual-run",
+    id: runId,
     timestamp: Date.now(),
   });
 } finally {

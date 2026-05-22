@@ -1,5 +1,4 @@
 import ejs from "npm:ejs";
-import { join } from "node:path";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("base-template-renderer");
@@ -31,66 +30,6 @@ export abstract class BaseTemplateRenderer<T extends ejs.Data> {
       logger.error("模板加载失败:", error);
       throw error;
     }
-  }
-
-  /**
-   * 获取模板文件内容
-   * @param templatePath 模板文件路径
-   * @returns 模板内容
-   */
-  protected async getTemplateContent(templatePath: string): Promise<string> {
-    const decoder = new TextDecoder("utf-8");
-
-    // 1. 首先尝试从exe内部资源加载
-    try {
-      // 使用 Deno.stat 检查资源是否存在
-      logger.info("import.meta.dirname", import.meta.dirname);
-      const stat = await Deno.stat(import.meta.dirname + templatePath);
-      if (stat.isFile) {
-        const bundledTemplate = await Deno.readFile(
-          import.meta.dirname + templatePath,
-        );
-        return decoder.decode(bundledTemplate);
-      }
-    } catch (error) {
-      logger.error("从exe内部加载模板文件失败，尝试其他方式:", error);
-    }
-
-    // 2. 尝试使用相对于当前工作目录的路径（开发时使用）
-    try {
-      const absolutePath = join(Deno.cwd(), templatePath);
-      const fileContent = Deno.readFileSync(absolutePath);
-      if (fileContent) {
-        return decoder.decode(fileContent);
-      }
-    } catch (error) {
-      logger.error("从工作目录加载模板文件失败:", error);
-    }
-
-    // 3. 最后尝试从可执行文件目录加载
-    try {
-      const execPath = Deno.execPath();
-      const execDir = execPath.substring(
-        0,
-        execPath.lastIndexOf(Deno.build.os === "windows" ? "\\" : "/"),
-      );
-      const resourcePath = join(execDir, templatePath);
-      const fileContent = Deno.readFileSync(resourcePath);
-      if (fileContent) {
-        return decoder.decode(fileContent);
-      }
-    } catch (error2) {
-      logger.error("从可执行文件目录加载失败:", error2);
-    }
-
-    // 如果所有尝试都失败，抛出错误
-    throw new Error(
-      `无法加载模板文件: ${templatePath}，请确保模板文件存在且路径正确。
-请检查以下路径：
-1. ${templatePath} (exe内部)
-2. ${join(Deno.cwd(), templatePath)} (工作目录)
-3. ${join(Deno.execPath(), "..", templatePath)} (可执行文件目录)`,
-    );
   }
 
   /**

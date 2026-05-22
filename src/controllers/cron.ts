@@ -2,8 +2,8 @@ import cron from "npm:node-cron";
 import { Logger } from "@zilla/logger";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import {
-  createWeixinArticleWorkflowDefinition,
-} from "@src/app/weixin-article/workflow.definition.ts";
+  createLocalWeixinArticleWorkflowDefinition,
+} from "@src/app/weixin-article/local-workflow.definition.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { createArticleNotifier } from "@src/app/weixin-article/notifications.ts";
 const logger = new Logger("cron");
@@ -15,7 +15,7 @@ export function getWorkflow(type: WorkflowType) {
   if (type !== WorkflowType.WeixinArticle) {
     throw new Error(`未知的工作流类型: ${type}`);
   }
-  return createWeixinArticleWorkflowDefinition();
+  return createLocalWeixinArticleWorkflowDefinition();
 }
 
 export const startCronJobs = async () => {
@@ -31,9 +31,13 @@ export const startCronJobs = async () => {
       try {
         logger.info("开始执行微信文章工作流...");
         const runtime = new LocalWorkflowRuntime();
-        await runtime.run(createWeixinArticleWorkflowDefinition(), {
-          payload: {},
-          id: "cron-job",
+        const runId = `cron-${crypto.randomUUID()}`;
+        await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
+          payload: {
+            runId,
+            trigger: "cron",
+          },
+          id: runId,
           timestamp: Date.now(),
         });
       } catch (error) {

@@ -166,7 +166,7 @@ function configFixture(): Pick<
         deduplication: {
           enabled: false,
           embeddingProvider: "dashscope",
-          vectorStore: "mysql",
+          vectorStore: "sqlite",
         },
       },
     },

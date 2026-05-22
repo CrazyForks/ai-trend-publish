@@ -17,7 +17,7 @@
 2. 运行 `deno task doctor` 查看缺失项。
 3. 对照 `trendpublish.config.example.ts` 补齐基础配置（尤其是
    `server.apiKey`、`providers.publish.weixin` 与 `providers.ai` 配置）。
-4. 如果是数据库相关错误，先将 `storage.mysql.enabled=false`
+4. 如果是数据库相关错误，先将 `features.article.deduplication.enabled=false`
    试跑，确认核心流程可用后再接入数据库。
 
 ### JSON-RPC 请求返回 401

@@ -65,12 +65,10 @@ Deno.test("weixin article services do not use global singleton defaults", async 
   assertEquals(violations, []);
 });
 
-Deno.test("database does not read global app config", async () => {
-  const violations = await findImportViolations("src/db", [
-    "@src/utils/config/app-config",
-  ]);
+Deno.test("legacy database module is removed", async () => {
+  const exists = await pathExists(join(ROOT, "src/db"));
 
-  assertEquals(violations, []);
+  assertEquals(exists, false);
 });
 
 Deno.test("resolvers do not expose global getInstance", async () => {
@@ -125,5 +123,15 @@ async function* walkTsFiles(dir: string): AsyncGenerator<string> {
     if (entry.isFile && path.endsWith(".ts")) {
       yield path;
     }
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await Deno.stat(path);
+    return true;
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return false;
+    throw error;
   }
 }

@@ -62,18 +62,14 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
         deduplication: {
           enabled: true,
           embeddingProvider: "dashscope",
-          vectorStore: "mysql",
+          vectorStore: "sqlite",
         },
       },
     },
     storage: {
-      mysql: {
-        enabled: true,
-        host: "127.0.0.1",
-        port: 3306,
-        user: "root",
-        password: "password",
-        database: "trendfinder",
+      vector: {
+        provider: "sqlite",
+        sqlitePath: "src/temp/test.sqlite3",
       },
     },
   }));
@@ -97,13 +93,13 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
     config.features.article.deduplication.embeddingProvider,
     "dashscope",
   );
-  assertEquals(config.features.article.deduplication.vectorStore, "mysql");
+  assertEquals(config.features.article.deduplication.vectorStore, "sqlite");
+  assertEquals(config.storage.vector.provider, "sqlite");
+  assertEquals(config.storage.vector.sqlitePath, "src/temp/test.sqlite3");
   assertEquals(config.features.article.notifications.channels, [
     "bark",
     "dingtalk",
   ]);
-  assertEquals(config.storage.mysql.enabled, true);
-  assertEquals(config.storage.mysql.port, 3306);
   assertEquals(config.providers.notify.bark.url, "https://example.com/bark");
   assertEquals(
     config.providers.notify.dingtalk.webhook,
@@ -117,6 +113,7 @@ Deno.test("resolveTrendPublishConfig uses feature defaults without provider enab
   assertEquals(config.features.article.renderer.template, "minimal");
   assertEquals(config.features.article.renderer.promptProfile, "technology");
   assertEquals(config.features.article.deduplication.enabled, false);
+  assertEquals(config.features.article.deduplication.vectorStore, "sqlite");
   assertEquals(config.features.article.notifications.channels, []);
   assertEquals(config.providers.vector.embedding.model, "");
   assertEquals(config.providers.notify.bark.url, "");
