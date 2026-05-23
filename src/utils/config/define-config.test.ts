@@ -21,6 +21,10 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
         dashscope: {
           apiKey: "dashscope-key",
         },
+        minimax: {
+          apiKey: "minimax-key",
+          apiHost: "https://api.minimax.io",
+        },
       },
       notify: {
         bark: { url: "https://example.com/bark" },
@@ -55,7 +59,7 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
         sources: ["web:https://example.com"],
         bodyImages: {
           mode: "missing",
-          provider: "dashscope",
+          provider: "minimax",
           count: 1,
           size: "1024*1024",
         },
@@ -86,8 +90,10 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
   assertEquals(config.providers.fetch.firecrawl.apiKey, "firecrawl-key");
   assertEquals(config.providers.fetch.twitter.xquikApiKey, "xquik-key");
   assertEquals(config.providers.image.dashscope.apiKey, "dashscope-key");
+  assertEquals(config.providers.image.minimax.apiKey, "minimax-key");
   assertEquals(config.features.article.bodyImages.mode, "missing");
-  assertEquals(config.features.article.bodyImages.provider, "dashscope");
+  assertEquals(config.features.article.bodyImages.provider, "minimax");
+  assertEquals(config.features.article.bodyImages.model, "image-01");
   assertEquals(config.features.article.deduplication.enabled, true);
   assertEquals(
     config.features.article.deduplication.embeddingProvider,

@@ -12,6 +12,7 @@ export interface PromptProfile {
   audience: string;
   editorialTone: string;
   selectionFocus: string[];
+  contentAngles: string[];
   preferredTopics: string[];
   lowValueSignals: string[];
   titleGuidance: string;
@@ -31,6 +32,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "模型能力、AI 产品、开发者工具、开源生态、算力基础设施、监管和商业模式的新变化",
       "能回答“今天为什么要看它”的新事实、新工具或新信号",
       "对开发者、产品团队、企业采购、创作者或普通用户有实际影响的内容",
+    ],
+    contentAngles: [
+      "新能力：具体模型、工具或平台能力发生了什么变化",
+      "落地价值：它会改变哪些开发、产品、创作或企业使用场景",
+      "后续信号：值得继续观察的生态、成本、竞争或监管变化",
     ],
     preferredTopics: [
       "模型和多模态能力更新",
@@ -62,6 +68,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "内容是否提供清晰事实、背景和后续影响",
       "是否适合被整理成读者能快速理解的资讯短文",
     ],
+    contentAngles: [
+      "事实主线：先交代事件、主体、时间和变化",
+      "读者影响：说明它可能影响哪些人或哪些日常决策",
+      "背景补充：只补原文支持的必要背景，不展开过度分析",
+    ],
     preferredTopics: [
       "重要公共事件",
       "公司与产品动态",
@@ -89,6 +100,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "公司战略变化、融资并购、上市、裁员、产品商业化和市场竞争",
       "对行业格局、成本结构、商业模式或组织决策的影响",
       "是否能形成可追踪的产业信号",
+    ],
+    contentAngles: [
+      "商业动作：公司做了什么、投入或取舍是什么",
+      "产业信号：这件事反映了市场、成本、渠道或竞争的什么变化",
+      "后续观察：它可能影响定价、客户、生态伙伴或竞争对手",
     ],
     preferredTopics: [
       "公司财报、融资、并购和上市",
@@ -122,6 +138,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "交互、体验、工作流、定价或可用性的变化",
       "是否有值得借鉴的产品策略、增长手段或设计取舍",
     ],
+    contentAngles: [
+      "用户场景：这个变化服务哪个具体人群或工作流",
+      "体验差异：新旧功能、交互或定价有什么实际差别",
+      "产品判断：它体现了什么定位、增长或设计取舍",
+    ],
     preferredTopics: [
       "产品发布和功能更新",
       "用户体验与交互设计",
@@ -149,6 +170,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "是否有清晰技术问题、解决方案、架构变化或可复用工具",
       "是否能帮助工程师选型、调试、部署、优化或理解新能力",
       "开源项目是否有明确用途、活跃度和适用边界",
+    ],
+    contentAngles: [
+      "问题场景：它解决了什么工程问题或开发痛点",
+      "技术抓手：API、架构、框架、CLI、部署或性能上的关键点",
+      "适用边界：适合谁用、不适合什么场景、上手成本如何",
     ],
     preferredTopics: [
       "开源项目、框架、SDK、API 和 CLI 工具",
@@ -180,6 +206,11 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "研究问题是否重要，方法是否新，实验是否有说服力",
       "结果对后续研究、工程实现或应用方向的启发",
       "是否能解释关键概念，而不是只翻译摘要",
+    ],
+    contentAngles: [
+      "研究问题：论文或实验试图解决什么问题",
+      "方法与证据：方法、数据、实验或评测的关键支撑是什么",
+      "限制与启发：结果边界、可复现性和后续研究/工程价值",
     ],
     preferredTopics: [
       "论文、模型方法和数据集",

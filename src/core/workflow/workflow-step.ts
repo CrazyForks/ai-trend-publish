@@ -5,6 +5,7 @@ import {
   WorkflowStepError,
   WorkflowTerminateError,
 } from "@src/core/workflow/workflow-error.ts";
+import { withLoggerContext } from "@src/core/logger/logger-context.ts";
 import type {
   WorkflowStepOptions,
 } from "@src/core/workflow/workflow-runtime.ts";
@@ -33,6 +34,17 @@ export class WorkflowStep {
   }
 
   async do<T>(
+    name: string,
+    optionsOrFn: WorkflowStepOptions | (() => Promise<T>),
+    fn?: () => Promise<T>,
+  ): Promise<T> {
+    return await withLoggerContext(
+      { step: name },
+      async () => await this.executeStep(name, optionsOrFn, fn),
+    );
+  }
+
+  private async executeStep<T>(
     name: string,
     optionsOrFn: WorkflowStepOptions | (() => Promise<T>),
     fn?: () => Promise<T>,
@@ -96,7 +108,7 @@ export class WorkflowStep {
         }ms`,
       );
       return retryResult.result;
-    } catch (error: any) {
+    } catch (error) {
       // 如果是终止错误，记录日志后直接抛出
       if (error instanceof WorkflowTerminateError) {
         logger.error(`Step ${name} terminated: ${error.message}`);
@@ -114,7 +126,7 @@ export class WorkflowStep {
         throw error;
       }
 
-      logger.error(`Step ${name} failed: ${error.message}`);
+      logger.error(`Step ${name} failed: ${getErrorMessage(error)}`);
       throw error;
     }
   }
@@ -167,4 +179,8 @@ export class WorkflowStep {
     const [, value, unit] = match;
     return parseInt(value) * units[unit];
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

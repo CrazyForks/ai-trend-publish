@@ -5,15 +5,15 @@ import {
 } from "@src/core/ports/image-generator.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { TextLogoGenerator } from "@src/integrations/image/providers/text-logo-generator.ts";
-import { PDD920LogoGenerator } from "@src/integrations/image/providers/pdd920-logo-generator.ts";
-import { AliWanX21ImageGenerator } from "@src/integrations/image/providers/aliyun/aliwanx21-image-generator.ts";
-import { AliyunWanxPosterGenerator } from "@src/integrations/image/providers/aliyun/aliwanx-poster-image-generator.ts";
+import { AliyunImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-image-generator.ts";
+import { AliyunPosterImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-poster-image-generator.ts";
+import { MiniMaxImageGenerator } from "@src/integrations/image/providers/minimax/minimax-image-generator.ts";
 
 export interface ImageGeneratorTypeMap {
   [ImageGeneratorType.TEXT_LOGO]: TextLogoGenerator;
-  [ImageGeneratorType.PDD920_LOGO]: PDD920LogoGenerator;
-  [ImageGeneratorType.ALIWANX21]: AliWanX21ImageGenerator;
-  [ImageGeneratorType.ALIWANX_POSTER]: AliyunWanxPosterGenerator;
+  [ImageGeneratorType.ALIYUN_IMAGE]: AliyunImageGenerator;
+  [ImageGeneratorType.ALIYUN_POSTER]: AliyunPosterImageGenerator;
+  [ImageGeneratorType.MINIMAX_IMAGE]: MiniMaxImageGenerator;
 }
 
 /**

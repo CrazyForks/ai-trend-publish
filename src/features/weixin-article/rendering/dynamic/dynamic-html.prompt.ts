@@ -35,6 +35,8 @@ export function getDynamicHtmlSystemPrompt(
 
 排版策略：
 0. 当前 profile 版式口径：${profile.layoutGuidance}
+0.1 当前 profile 成文角度：
+${profile.contentAngles.map((item) => `   - ${item}`).join("\n")}
 1. 根据文章组合选择主题，不要固定一种模板：
    - 速报：紧凑目录 + 每条 2-3 段 + 关键影响
    - 深度观察：引言 + 分节长文 + 观察点
@@ -79,6 +81,8 @@ export function getDynamicHtmlUserPrompt(
 当前内容定位：${profile.label}
 目标读者：${profile.audience}
 版式口径：${profile.layoutGuidance}
+成文角度：
+${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
 
 需要包含：
 1. 一个有信息量的开篇标题区：不要只写“AI 快报”，要体现本期核心主题。

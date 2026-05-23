@@ -5,6 +5,9 @@ import {
   PublishResult,
 } from "@src/core/ports/content-publisher.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import { ProviderError } from "@src/core/errors/provider-error.ts";
+import { redactSensitiveText } from "@src/utils/security/redact.ts";
+import { HttpClient, HttpError } from "@src/utils/http/http-client.ts";
 
 type WeixinRelayConfig = ResolvedTrendPublishConfig["providers"]["publish"][
   "weixinRelay"
@@ -18,7 +21,10 @@ interface RelayResponse<T> {
 
 export class WeixinRelayPublisher
   implements ContentPublisher, ContentImageUploader {
-  constructor(private readonly config: WeixinRelayConfig) {}
+  constructor(
+    private readonly config: WeixinRelayConfig,
+    private readonly httpClient = HttpClient.getInstance(),
+  ) {}
 
   async validateIpWhitelist(): Promise<string | boolean> {
     const result = await this.request<{ result: string | boolean }>(
@@ -70,33 +76,53 @@ export class WeixinRelayPublisher
       throw new Error("providers.publish.weixinRelay.token is not configured");
     }
 
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${this.config.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    const text = await response.text();
-    const json = parseRelayResponse<T>(text);
-    if (!response.ok || !json.success) {
-      throw new Error(
-        json.error ?? `Weixin relay request failed: HTTP ${response.status}`,
+    let json: RelayResponse<T>;
+    try {
+      json = await this.httpClient.request<RelayResponse<T>>(
+        `${baseUrl}${path}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${this.config.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          retries: 1,
+          timeout: 30000,
+        },
       );
+    } catch (error) {
+      const statusCode = error instanceof HttpError
+        ? error.statusCode
+        : undefined;
+      throw new ProviderError({
+        provider: "weixin-relay",
+        kind: statusCode === 401 || statusCode === 403
+          ? "auth"
+          : "invalid_response",
+        statusCode,
+        message: redactSensitiveText(
+          error instanceof Error ? error.message : String(error),
+        ),
+      });
+    }
+    if (!json.success) {
+      throw new ProviderError({
+        provider: "weixin-relay",
+        kind: "invalid_response",
+        message: redactSensitiveText(
+          json.error ?? "Weixin relay request failed",
+        ),
+      });
     }
     if (json.data === undefined) {
-      throw new Error("Weixin relay response is missing data");
+      throw new ProviderError({
+        provider: "weixin-relay",
+        kind: "empty_content",
+        message: "Weixin relay response is missing data",
+      });
     }
     return json.data;
-  }
-}
-
-function parseRelayResponse<T>(text: string): RelayResponse<T> {
-  try {
-    return text ? JSON.parse(text) as RelayResponse<T> : {};
-  } catch {
-    return { error: `Weixin relay returned non-JSON response: ${text}` };
   }
 }
 

@@ -57,11 +57,18 @@ export default defineConfig({
     /**
      * 图片生成凭证。
      *
-     * DashScope / 阿里云百炼用于生成封面图和可选的正文 AI 配图。
+     * 支持阿里云图片生成和 MiniMax 图片生成。
+     *
+     * 功能里 `provider: "dashscope"` 时读取 dashscope.apiKey；
+     * 功能里 `provider: "minimax"` 时读取 minimax.apiKey。
      */
     image: {
       dashscope: {
         apiKey: "",
+      },
+      minimax: {
+        apiKey: "",
+        apiHost: "https://api.minimax.io",
       },
     },
 
@@ -212,12 +219,16 @@ export default defineConfig({
       /**
        * 封面图生成。
        *
-       * 如果 DashScope 未配置或生成失败，流程会回退到内置默认封面。
+       * provider 可选：
+       * - "dashscope": 阿里云图片生成，例如 qwen-image-2.0-pro
+       * - "minimax": MiniMax 图片生成，例如 image-01
+       *
+       * 如果 provider 未配置或生成失败，流程会回退到内置默认封面。
        */
       cover: {
         enabled: true,
         provider: "dashscope",
-        model: "wanx-poster-generation-v1",
+        model: "qwen-image-2.0-pro",
       },
 
       /**
@@ -231,6 +242,7 @@ export default defineConfig({
       bodyImages: {
         mode: "off",
         provider: "dashscope",
+        model: "qwen-image-2.0",
         count: 1,
         size: "1024*1024",
       },
@@ -253,7 +265,9 @@ export default defineConfig({
   /**
    * 业务数据和运行产物存储。
    *
-   * 运行配置不会存到数据库。artifact/runState 支撑内置看板和 dry-run 产物。
+   * artifact/runState 支撑内置看板和 dry-run 产物。
+   * runtimeConfig 保存 Dashboard 可编辑的业务配置，本地/Docker 用 SQLite，
+   * Cloudflare 用 D1。密钥不会写入 runtimeConfig。
    */
   storage: {
     artifacts: {
@@ -264,9 +278,51 @@ export default defineConfig({
       provider: "local-json",
       outputDir: "src/temp",
     },
+    runtimeConfig: {
+      provider: "sqlite",
+      sqlitePath: "src/temp/trendpublish.sqlite3",
+    },
     vector: {
       provider: "sqlite",
       sqlitePath: "src/temp/trendpublish.sqlite3",
+    },
+  },
+
+  /**
+   * logger 观测镜像。
+   *
+   * 所有 `new Logger(...).info/warn/error/debug` 输出都会进入这里配置的 sink。
+   * 原 logger 仍会正常输出；stdout sink 会额外输出一份结构化 JSON。
+   * 接 Axiom / Better Stack / 自建 collector 时，开启 http sink。
+   */
+  observability: {
+    enabled: true,
+    serviceName: "trendpublish",
+    environment: "local",
+    stdout: {
+      enabled: false,
+      format: "json",
+    },
+    http: {
+      enabled: false,
+      endpoint: "",
+      bearerToken: "",
+      headers: {},
+      format: "object",
+      timeoutMs: 5000,
+    },
+    axiom: {
+      enabled: false,
+      dataset: "",
+      token: "",
+      apiUrl: "https://api.axiom.co",
+      timeoutMs: 5000,
+    },
+    betterStack: {
+      enabled: false,
+      sourceToken: "",
+      ingestingHost: "https://in.logs.betterstack.com",
+      timeoutMs: 5000,
     },
   },
 });

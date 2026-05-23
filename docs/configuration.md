@@ -8,10 +8,10 @@ cp trendpublish.config.example.ts trendpublish.config.ts
 deno task doctor
 ```
 
-运行配置只从 `trendpublish.config.ts`
-读取。数据库只保存运行历史、步骤明细、发布结果和向量去重记录，不再保存运行配置。
-`doctor` 会按功能块检查缺失项，并把 `your_api_key`、`change-me`
-这类占位值视为未配置。
+部署级配置只从 `trendpublish.config.ts` 读取。Dashboard
+可编辑的运行时业务配置会写入 SQLite/D1；密钥、binding 和外部服务连接仍然只放在
+TS 配置或部署环境里。 `doctor` 会按功能块检查缺失项，并把
+`your_api_key`、`change-me` 这类占位值视为未配置。
 
 ## 配置文件路径
 
@@ -126,10 +126,11 @@ features: {
 | 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin` 或 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay      |
 | 文章数据源              | `features.article.sources`                                                                  | URL 列表，可用抓取分组前缀                         |
 | 抓取供应商              | `providers.fetch.*`                                                                         | FireCrawl、Twitter/X、Xquik、Jina、RSS             |
-| 阿里云封面生图          | `features.article.cover`, `providers.image.dashscope.apiKey`                                | 未配置或失败时使用兜底封面                         |
-| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope.apiKey`                           | 按文章内容生成正文配图，失败时回退已有图片         |
+| 封面生图                | `features.article.cover`, `providers.image.dashscope/minimax.apiKey`                        | 支持阿里云图片生成和 MiniMax，失败时使用兜底封面   |
+| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope/minimax.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片         |
 | 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`        | 本地/Docker 用 SQLite，Cloudflare 用 D1            |
 | 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                     | 本地写文件，Cloudflare 使用 R2/KV/D1               |
+| 日志观测                | `observability`                                                                             | 镜像所有 Logger 输出到 stdout 或 HTTP ingest       |
 | Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                          | channels 中包含 `bark` 时检查 Bark URL             |
 | 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                      | channels 中包含 `dingtalk` 时检查 webhook          |
 | 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                        | channels 中包含 `feishu` 时检查 webhook            |
@@ -147,6 +148,10 @@ storage: {
   runState: {
     provider: "local-json",
     outputDir: "src/temp",
+  },
+  runtimeConfig: {
+    provider: "sqlite",
+    sqlitePath: "src/temp/trendpublish.sqlite3",
   },
   vector: {
     provider: "sqlite",
@@ -168,12 +173,28 @@ storage: {
     kvBinding: "ARTICLE_RUNS",
     d1Binding: "ARTICLE_DB",
   },
+  runtimeConfig: {
+    provider: "d1",
+    d1Binding: "ARTICLE_DB",
+  },
   vector: {
     provider: "d1",
     d1Binding: "ARTICLE_DB",
   },
 },
 ```
+
+`runtimeConfig` 是 Dashboard 可编辑配置的存储位置。它只保存 Profile、
+数据源、抓取分组、定时规则和非敏感功能参数；provider 密钥仍来自
+`providers.*`、Docker secrets 或 Cloudflare secrets。
+
+Dashboard 中的运行时配置分成两类：
+
+- 能力 Profile：LLM、图片生成、通知、抓取策略、Embedding 等可复用能力。
+- 功能 Profile：微信文章这类具体功能，引用能力 Profile，并允许覆盖少量参数。
+
+例如多个微信文章 Profile 可以共用同一个“正文配图”能力 Profile，也可以分别覆盖
+图片数量或尺寸。
 
 `/dashboard` 会读取同一套 run state 和 artifact，因此本地和 Cloudflare
 都能查看步骤、错误、耗时和 HTML 产物。
@@ -278,7 +299,20 @@ providers: {
 },
 features: {
   article: {
-    cover: { enabled: true, provider: "dashscope" },
+    cover: { enabled: true, provider: "dashscope", model: "qwen-image-2.0-pro" },
+  },
+},
+```
+
+如果使用 MiniMax：
+
+```ts
+providers: {
+  image: { minimax: { apiKey: "your_minimax_key" } },
+},
+features: {
+  article: {
+    cover: { enabled: true, provider: "minimax", model: "image-01" },
   },
 },
 ```
@@ -296,6 +330,26 @@ features: {
     bodyImages: {
       mode: "missing",
       provider: "dashscope",
+      model: "qwen-image-2.0",
+      count: 1,
+      size: "1024*1024",
+    },
+  },
+},
+```
+
+MiniMax 正文配图写法：
+
+```ts
+providers: {
+  image: { minimax: { apiKey: "your_minimax_key" } },
+},
+features: {
+  article: {
+    bodyImages: {
+      mode: "missing",
+      provider: "minimax",
+      model: "image-01",
       count: 1,
       size: "1024*1024",
     },
@@ -362,6 +416,60 @@ features: {
 通知是否启用只看 `features.article.notifications.channels`；`providers.notify.*`
 只保存对应渠道的凭证。
 
+### 8. 接入日志观测
+
+项目里的日志仍然使用原来的 `new Logger("name").info/warn/error/debug` 写法。
+配置 `observability` 后，这些日志会被额外镜像成结构化事件，可送到 stdout 或 HTTP
+日志入口。原本的控制台输出不会改变。
+
+```ts
+observability: {
+  enabled: true,
+  serviceName: "trendpublish",
+  environment: "production",
+  stdout: {
+    enabled: false,
+    format: "json",
+  },
+  http: {
+    enabled: true,
+    endpoint: "https://logs.example.com/ingest",
+    bearerToken: "your_log_token",
+    headers: {},
+    format: "object",
+    timeoutMs: 5000,
+  },
+},
+```
+
+HTTP sink 是通用入口，适合接 Axiom、Better Stack、自建 OpenTelemetry Collector
+或其他支持 HTTP ingest 的日志服务。`apiKey`、`token`、`secret`
+等字段会做基础脱敏。
+
+也可以直接用内置的平台便捷配置：
+
+```ts
+observability: {
+  enabled: true,
+  serviceName: "trendpublish",
+  environment: "production",
+  axiom: {
+    enabled: true,
+    dataset: "trendpublish",
+    token: "your_axiom_api_token",
+  },
+  betterStack: {
+    enabled: false,
+    sourceToken: "your_better_stack_source_token",
+    ingestingHost: "https://in.logs.betterstack.com",
+  },
+},
+```
+
+Axiom 需要先创建 dataset 和带 ingest 权限的 API token。Better Stack Logs
+需要创建 HTTP source，使用 source token。workflow 内部日志会自动带上
+`runId`、`step`、 `profileId` 等字段，方便按一次运行过滤。
+
 ## 模型配置
 
 默认情况下，全项目只使用一套模型配置，内容排序、摘要、标题生成和动态模板都会走这组配置。
@@ -418,8 +526,10 @@ features: {
 
 ## 定时任务
 
-服务启动后每天凌晨 3 点（`Asia/Shanghai`）固定执行微信文章发布工作流
-`weixin-article-workflow`。项目不再按星期切换其他工作流。
+服务启动后使用 heartbeat 调度：本地/Docker 和 Cloudflare 都会定期检查
+`runtimeConfig` 中保存的 schedule，命中后才创建微信文章 workflow 运行实例。
+默认初始化出的 schedule 是每天凌晨 3 点（`Asia/Shanghai`），后续可以在 Dashboard
+修改，不需要重新部署。项目不再按星期切换其他工作流。
 
 ## 排查建议
 

@@ -20,8 +20,15 @@ import { R2ArtifactStore } from "@src/platform/cloudflare/r2-artifact-store.ts";
 import { KvArtifactStore } from "@src/platform/cloudflare/kv-artifact-store.ts";
 import { KvD1RunStateStore } from "@src/platform/cloudflare/kv-d1-run-state-store.ts";
 import { D1VectorStore } from "@src/platform/cloudflare/d1-vector-store.ts";
+import { D1RuntimeConfigStore } from "@src/platform/cloudflare/d1-runtime-config-store.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
+import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
+import { withLoggerContext } from "@src/core/logger/logger-context.ts";
+import {
+  resolveArticleRuntimeConfig,
+  seedArticleRuntimeConfig,
+} from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
 import type {
   CloudflareD1Database,
@@ -97,8 +104,8 @@ function toWorkflowEvent(
 export class WeixinArticleCloudflareWorkflow
   extends CloudflareWorkflowEntrypoint {
   private readonly definition: WorkflowDefinition<WeixinArticleWorkflowInput> =
-    createWeixinArticleWorkflowDefinition(
-      async (config) => {
+    createWeixinArticleWorkflowDefinition({
+      dependencyFactory: async (config, _event, runtimeConfig) => {
         return await createWeixinArticleDependencies(config, {
           artifactStore: createCloudflareArtifactStore(this.env),
           runStateStore: new KvD1RunStateStore(
@@ -108,28 +115,41 @@ export class WeixinArticleCloudflareWorkflow
           vectorStoreFactory: async () =>
             new D1VectorStore(this.env.ARTICLE_DB),
           mode: "cloudflare-workflow",
+          profileId: runtimeConfig?.profile.id,
+          runtimeConfigSnapshot: runtimeConfig?.snapshot,
         });
       },
-    );
+      runtimeConfigStoreFactory: async () =>
+        new D1RuntimeConfigStore(this.env.ARTICLE_DB),
+    });
 
   async run(
     event: CloudflareWorkflowEvent<WeixinArticleWorkflowInput>,
     step: CloudflareWorkflowStep,
   ): Promise<void> {
     const workflowEvent = toWorkflowEvent(event);
-    try {
-      await initializeCloudflareConfig(this.env);
-      await this.definition.run(workflowEvent, toStepContext(step));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[cloudflare-workflow] run failed", {
-        runId: workflowEvent.payload.runId ?? workflowEvent.id,
-        message,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      await markCloudflareRunFailed(this.env, workflowEvent, message);
-      throw error;
-    }
+    await withLoggerContext({
+      runId: workflowEvent.payload.runId ?? workflowEvent.id,
+      workflowId: WEIXIN_ARTICLE_WORKFLOW_ID,
+      profileId: workflowEvent.payload.profileId,
+      dryRun: workflowEvent.payload.dryRun,
+      trigger: workflowEvent.payload.trigger,
+      mode: "cloudflare-workflow",
+    }, async () => {
+      try {
+        await initializeCloudflareConfig(this.env);
+        await this.definition.run(workflowEvent, toStepContext(step));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[cloudflare-workflow] run failed", {
+          runId: workflowEvent.payload.runId ?? workflowEvent.id,
+          message,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        await markCloudflareRunFailed(this.env, workflowEvent, message);
+        throw error;
+      }
+    });
   }
 }
 
@@ -199,6 +219,7 @@ function createStores(env: CloudflareEnv) {
   return {
     artifactStore: createCloudflareArtifactStore(env),
     runStateStore: new KvD1RunStateStore(env.ARTICLE_RUNS, env.ARTICLE_DB),
+    runtimeConfigStore: new D1RuntimeConfigStore(env.ARTICLE_DB),
   };
 }
 
@@ -308,9 +329,14 @@ async function handleConfigSummaryRequest(
   if (unauthorized) return unauthorized;
 
   await initializeCloudflareConfig(env);
+  const config = await getAppConfig();
+  const runtimeConfig = await resolveArticleRuntimeConfig(
+    createStores(env).runtimeConfigStore,
+    config,
+  );
   return Response.json(
     createDashboardConfigSummary(
-      await getAppConfig(),
+      runtimeConfig.config,
       "cloudflare-workflow",
     ),
   );
@@ -457,6 +483,22 @@ export default {
       return await handleConfigSummaryRequest(request, env);
     }
     if (
+      url.pathname === "/api/config/providers" ||
+      url.pathname.startsWith("/api/config/capabilities") ||
+      url.pathname.startsWith("/api/config/features/article/profiles")
+    ) {
+      const unauthorized = await verifyCloudflareAuth(request, env);
+      if (unauthorized) return unauthorized;
+      await initializeCloudflareConfig(env);
+      const response = await handleRuntimeConfigApi(
+        request,
+        url.pathname,
+        createStores(env).runtimeConfigStore,
+        await getAppConfig(),
+      );
+      if (response) return response;
+    }
+    if (
       url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")
     ) {
       return await handleRunsRequest(request, env, url.pathname);
@@ -491,10 +533,29 @@ export default {
     env: CloudflareEnv,
   ): Promise<void> {
     await initializeCloudflareConfig(env);
-    const runId = `cf-cron-${crypto.randomUUID()}`;
-    await env.WEIXIN_ARTICLE_WORKFLOW.create({
-      id: `${WEIXIN_ARTICLE_WORKFLOW_ID}-${runId}`,
-      params: { dryRun: false, runId, trigger: "cron" },
-    });
+    const config = await getAppConfig();
+    const runtimeConfigStore = new D1RuntimeConfigStore(env.ARTICLE_DB);
+    await seedArticleRuntimeConfig(runtimeConfigStore, config);
+    const dueSchedules = await runtimeConfigStore.listDueSchedules(new Date());
+    for (const due of dueSchedules) {
+      if (
+        !await runtimeConfigStore.markScheduleTriggered(
+          due.schedule.id,
+          due.slot,
+        )
+      ) {
+        continue;
+      }
+      const runId = `cf-cron-${crypto.randomUUID()}`;
+      await env.WEIXIN_ARTICLE_WORKFLOW.create({
+        id: `${WEIXIN_ARTICLE_WORKFLOW_ID}-${runId}`,
+        params: {
+          dryRun: due.schedule.dryRun,
+          runId,
+          trigger: "cron",
+          profileId: due.schedule.profileId,
+        },
+      });
+    }
   },
 };

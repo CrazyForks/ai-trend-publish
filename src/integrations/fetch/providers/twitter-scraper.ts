@@ -7,6 +7,7 @@ import {
 import { ConfigurationError } from "@src/utils/config/app-config.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { formatDate } from "@src/utils/common.ts";
+import { HttpClient } from "@src/utils/http/http-client.ts";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("twitter-scraper");
@@ -52,6 +53,7 @@ export class TwitterScraper implements ContentScraper {
     private readonly configuredProvider?: ResolvedTrendPublishConfig[
       "providers"
     ]["fetch"]["twitter"],
+    private readonly httpClient = HttpClient.getInstance(),
   ) {}
 
   async refresh(): Promise<void> {
@@ -171,18 +173,13 @@ export class TwitterScraper implements ContentScraper {
         )
       }&queryType=Top`;
 
-    const response = await fetch(apiUrl, {
+    const tweets = await this.httpClient.request<TweetSearchResponse>(apiUrl, {
       headers: {
         "X-API-Key": `${this.xApiBearerToken}`,
       },
+      retries: 1,
+      timeout: 30000,
     });
-
-    if (!response.ok) {
-      const errorMsg = `Failed to fetch tweets: ${response.statusText}`;
-      throw new Error(errorMsg);
-    }
-
-    const tweets = await response.json() as TweetSearchResponse;
     return tweets.tweets ?? [];
   }
 
@@ -195,20 +192,17 @@ export class TwitterScraper implements ContentScraper {
     apiUrl.searchParams.set("queryType", "Top");
     apiUrl.searchParams.set("limit", String(limit));
 
-    const response = await fetch(apiUrl, {
-      headers: {
-        "x-api-key": `${this.xquikApiKey}`,
-        "xquik-api-contract": XQUIK_API_CONTRACT,
+    const tweets = await this.httpClient.request<TweetSearchResponse>(
+      apiUrl.toString(),
+      {
+        headers: {
+          "x-api-key": `${this.xquikApiKey}`,
+          "xquik-api-contract": XQUIK_API_CONTRACT,
+        },
+        retries: 1,
+        timeout: 30000,
       },
-    });
-
-    if (!response.ok) {
-      const errorMsg =
-        `Failed to fetch tweets from Xquik: ${response.statusText}`;
-      throw new Error(errorMsg);
-    }
-
-    const tweets = await response.json() as TweetSearchResponse;
+    );
     return tweets.tweets ?? [];
   }
 

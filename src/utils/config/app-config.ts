@@ -7,6 +7,7 @@ import {
   resolveTrendPublishConfig,
   TrendPublishConfigSource,
 } from "@src/utils/config/define-config.ts";
+import { configureLoggerObservability } from "@src/core/logger/configure-logger-observability.ts";
 
 export class ConfigurationError extends Error {
   constructor(message: string) {
@@ -183,7 +184,9 @@ async function loadAppConfig(
   const runtime = options.runtime ?? createConfigRuntime();
   if (options.source) {
     const config = await resolveConfigSource(options.source, runtime);
-    return resolveTrendPublishConfig(config);
+    const resolved = resolveTrendPublishConfig(config);
+    configureLoggerObservability(resolved);
+    return resolved;
   }
 
   const { configPath, explicit } = resolveConfigPath(options.configPath);
@@ -204,7 +207,9 @@ async function loadAppConfig(
     module.default ?? module.config ?? {},
     runtime,
   );
-  return resolveTrendPublishConfig(config);
+  const resolved = resolveTrendPublishConfig(config);
+  configureLoggerObservability(resolved);
+  return resolved;
 }
 
 async function importConfigModule(

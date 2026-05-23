@@ -19,10 +19,39 @@ export function cleanLLMText(input: string): string {
     .trim();
 }
 
+export function cleanLLMTitle(input: string): string {
+  const cleaned = cleanLLMText(input);
+  const candidates = cleaned
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^\s*[-*#>\d.、）)]\s*/, "")
+        .replace(/^(标题|主标题|建议标题|文章标题)\s*[:：]\s*/i, "")
+        .replace(/^["'“”‘’]+|["'“”‘’。]+$/g, "")
+        .trim()
+    )
+    .filter(Boolean)
+    .filter((line) => !isReasoningLine(line));
+  const title = candidates.at(-1) ?? "";
+  if (!title || isReasoningLine(title)) {
+    return "";
+  }
+  return title
+    .replace(/[。.!！?？]+$/g, "")
+    .trim()
+    .slice(0, 48);
+}
+
 export function cleanLLMJsonText(input: string): string {
   const cleaned = stripMarkdownFence(stripThinkTags(input));
   const jsonObject = extractFirstJsonObject(cleaned);
   return jsonObject ?? cleaned.trim();
+}
+
+function isReasoningLine(line: string): boolean {
+  return /^(让我|我来|我们先|根据以上|以下是|分析|推理|思考|步骤|结论[:：]|输出[:：])/i
+    .test(line) ||
+    /<think\b|<\/think>/i.test(line);
 }
 
 export function normalizeLLMResponse<T>(response: T): T {

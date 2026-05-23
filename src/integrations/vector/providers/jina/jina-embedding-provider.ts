@@ -5,6 +5,7 @@ import {
   EmbeddingProvider,
   EmbeddingResult,
 } from "@src/core/ports/embedding.ts";
+import { HttpClient } from "@src/utils/http/http-client.ts";
 import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina Embeddings API Request
@@ -43,7 +44,10 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
   private defaultModel: string;
   private jinaApiUrl = "https://api.jina.ai/v1/embeddings";
 
-  constructor(private readonly config?: JinaEmbeddingProviderConfig) {
+  constructor(
+    private readonly config?: JinaEmbeddingProviderConfig,
+    private readonly httpClient = HttpClient.getInstance(),
+  ) {
     this.defaultModel = config?.model || "jina-embeddings-v2-base-en"; // A common default Jina model
   }
 
@@ -88,7 +92,7 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
     );
 
     try {
-      const response = await fetch(this.jinaApiUrl, {
+      const result = await this.httpClient.request<unknown>(this.jinaApiUrl, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.apiKey}`,
@@ -96,28 +100,9 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
           "Accept": "application/json",
         },
         body: JSON.stringify(requestBody),
+        retries: 1,
+        timeout: 30000,
       });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(
-          `[JinaEmbeddingProvider] API request failed with status ${response.status}: ${errorBody}`,
-        );
-        // Attempt to parse Jina specific error structure if available
-        try {
-          const errJson = JSON.parse(errorBody);
-          if (errJson && errJson.detail) { // Jina errors often have a "detail" field
-            throw new Error(
-              `Jina Embeddings API Error: ${errJson.detail} (Status: ${response.status})`,
-            );
-          }
-        } catch { /* ignore parsing error, throw original text */ }
-        throw new Error(
-          `Jina Embeddings API request failed with status ${response.status}: ${errorBody}`,
-        );
-      }
-
-      const result = await response.json();
       const parsedResult = JinaEmbeddingResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {

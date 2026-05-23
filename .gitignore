@@ -1,4 +1,5 @@
 node_modules
+dashboard/.vite/
 .env
 .dev.vars
 cloudflare-token.local

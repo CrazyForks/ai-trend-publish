@@ -21,6 +21,7 @@ export interface DashboardConfigSummary {
     bodyImages: {
       mode: string;
       provider: string;
+      model: string;
       count: number;
       size: string;
     };
@@ -36,10 +37,15 @@ export interface DashboardConfigSummary {
   storage: {
     artifacts: string;
     runState: string;
+    runtimeConfig: string;
     vector: string;
   };
   fetchGroups: string[];
   providersConfigured: Record<string, boolean>;
+  observability: {
+    enabled: boolean;
+    sinks: string[];
+  };
 }
 
 export function createDashboardConfigSummary(
@@ -68,6 +74,7 @@ export function createDashboardConfigSummary(
       bodyImages: {
         mode: article.bodyImages.mode,
         provider: article.bodyImages.provider,
+        model: article.bodyImages.model,
         count: article.bodyImages.count,
         size: article.bodyImages.size,
       },
@@ -83,6 +90,7 @@ export function createDashboardConfigSummary(
     storage: {
       artifacts: config.storage.artifacts.provider,
       runState: config.storage.runState.provider,
+      runtimeConfig: config.storage.runtimeConfig.provider,
       vector: config.storage.vector.provider,
     },
     fetchGroups: Object.keys(config.fetchGroups),
@@ -96,6 +104,7 @@ export function createDashboardConfigSummary(
       ),
       rss: Boolean(config.providers.fetch.rss.baseUrl),
       dashscopeImage: Boolean(config.providers.image.dashscope.apiKey),
+      minimaxImage: Boolean(config.providers.image.minimax.apiKey),
       weixin: Boolean(
         config.providers.publish.weixin.appId &&
           config.providers.publish.weixin.appSecret,
@@ -108,6 +117,15 @@ export function createDashboardConfigSummary(
       bark: Boolean(config.providers.notify.bark.url),
       dingtalk: Boolean(config.providers.notify.dingtalk.webhook),
       feishu: Boolean(config.providers.notify.feishu.webhookUrl),
+    },
+    observability: {
+      enabled: config.observability.enabled,
+      sinks: [
+        config.observability.stdout.enabled ? "stdout" : "",
+        config.observability.http.enabled ? "http" : "",
+        config.observability.axiom.enabled ? "axiom" : "",
+        config.observability.betterStack.enabled ? "better-stack" : "",
+      ].filter(Boolean),
     },
   };
 }

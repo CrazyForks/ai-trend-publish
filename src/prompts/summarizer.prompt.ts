@@ -32,10 +32,13 @@ export const getSummarizerSystemPrompt = (
 当前内容定位重点：
 ${profile.selectionFocus.map((item) => `- ${item}`).join("\n")}
 
+当前 profile 的成文角度：
+${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
+
 内容结构建议：
 - 第一段直接给出事件和主结论。
-- 第二段说明背景、产品/技术/公司变化或可操作价值。
-- 第三段可以写影响、风险、后续观察点；信息不足时可以省略。
+- 第二段按当前 profile 的成文角度展开，不要所有类型都写成同一种 AI 科技快报。
+- 第三段可以写影响、限制、适用边界、风险或后续观察点；信息不足时可以省略。
 - 根据内容类型灵活变化：产品更新突出变化点，开源项目突出用途，研究论文突出方法和意义，商业新闻突出行业信号，教程内容突出步骤和适用人群。
 
 格式要求：
@@ -66,6 +69,8 @@ export const getSummarizerUserPrompt = ({
 当前内容定位：${profile.label}
 目标读者：${profile.audience}
 写作口径：${profile.editorialTone}
+成文角度：
+${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
 
 长度要求：${minLength}-${maxLength}字。
 
@@ -82,7 +87,8 @@ ${content}
 7. 可以少量使用 <strong>...</strong> 标出关键对象或变化点。
 8. 不使用 Markdown、列表标签、链接标签或不兼容公众号的 HTML。
 9. keywords 为 3-5 个中文短词或英文产品名，单个关键词尽量不超过 8 个字符。
-10. 只返回符合 system 约定的 JSON。`;
+10. 如果原文是公告、论文、项目、教程、商业新闻或产品更新，要按它自己的内容类型写，不要强行写成 AI 行业趋势。
+11. 只返回符合 system 约定的 JSON。`;
 };
 
 export const getTitleSystemPrompt = (
@@ -121,5 +127,6 @@ ${content}
 2. 优先覆盖最重要的一条或两条新闻，不要试图塞满所有信息。
 3. 标题应具体、克制、有信息量。
 4. 不超过 20 个中文字符；保留必要英文产品名。
-5. 不要输出推理过程、解释、Markdown、JSON 或 <think> 标签。`;
+5. 不要输出推理过程、解释、Markdown、JSON 或 <think> 标签。
+6. 禁止标题以“让我分析”“标题：”“以下是”“根据内容”开头。`;
 };

@@ -14,6 +14,9 @@
 - `GET /dashboard`
 - `GET /api/health`
 - `GET /api/config/summary`
+- `GET /api/config/providers`
+- `GET /api/config/capabilities`
+- `GET /api/config/features/article/profiles`
 - `POST /api/runs`
 - `GET /api/runs`
 - `GET /api/runs/:runId`
@@ -45,6 +48,20 @@ curl -H "Authorization: Bearer your-api-key" \
 
 `GET /api/config/summary` 返回 dashboard 展示用的脱敏配置摘要，只包含模板、
 数据源数量、存储类型和功能开关，不返回任何 provider secret。
+
+运行时配置 REST API 用于 Dashboard：
+
+- `GET /api/config/providers`：查看 provider 脱敏可用状态。
+- `GET/POST /api/config/capabilities`：管理 LLM、图片生成、通知等共享能力
+  Profile。
+- `GET/POST /api/config/features/article/profiles`：管理微信文章 Profile。
+- `PATCH /api/config/features/article/profiles/:profileId`：更新文章 Profile
+  参数。
+- `DELETE /api/config/features/article/profiles/:profileId`：删除非默认微信文章
+  Profile，并清理它的数据源、抓取分组和定时规则。
+- `PUT /api/config/features/article/profiles/:profileId/sources`：替换数据源。
+- `PUT /api/config/features/article/profiles/:profileId/fetch-groups`：替换抓取分组。
+- `PUT /api/config/features/article/profiles/:profileId/schedule`：更新定时。
 
 触发一次 dry-run：
 

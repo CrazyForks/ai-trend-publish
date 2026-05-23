@@ -6,6 +6,7 @@ import {
   ScrapedContent,
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
+import { HttpClient } from "@src/utils/http/http-client.ts";
 import { z } from "npm:zod@3.25.76";
 
 // Define a schema for the Jina API response for stricter parsing.
@@ -36,7 +37,10 @@ export class JinaScraper implements ContentScraper {
   private apiKey = "";
   private jinaApiUrl = "https://r.jina.ai/";
 
-  constructor(private readonly configuredApiKey?: string) {}
+  constructor(
+    private readonly configuredApiKey?: string,
+    private readonly httpClient = HttpClient.getInstance(),
+  ) {}
 
   async refresh(): Promise<void> {
     this.apiKey = this.configuredApiKey ?? "";
@@ -60,26 +64,19 @@ export class JinaScraper implements ContentScraper {
     );
 
     try {
-      const response = await fetch(this.jinaApiUrl + sourceId, { // Jina Reader API uses GET with URL in path
-        method: "GET", // Changed from POST to GET as per Jina Reader API docs (https://jina.ai/reader)
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-          "Accept": "application/json",
-          // "X-With-Images-Summary": "true", // Example of an optional header
+      const result = await this.httpClient.request<unknown>(
+        this.jinaApiUrl + sourceId,
+        { // Jina Reader API uses GET with URL in path
+          method: "GET", // Changed from POST to GET as per Jina Reader API docs (https://jina.ai/reader)
+          headers: {
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Accept": "application/json",
+            // "X-With-Images-Summary": "true", // Example of an optional header
+          },
+          retries: 1,
+          timeout: 45000,
         },
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(
-          `[JinaScraper] API request failed with status ${response.status}: ${errorBody}`,
-        );
-        throw new Error(
-          `Jina API request failed with status ${response.status}: ${errorBody}`,
-        );
-      }
-
-      const result = await response.json();
+      );
 
       // Validate the response structure
       const parsedResult = JinaResponseSchema.safeParse(result);

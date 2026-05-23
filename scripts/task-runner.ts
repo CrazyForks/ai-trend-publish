@@ -20,17 +20,24 @@ const TEST_FILES = [
   "src/release-readiness.test.ts",
   "src/utils/config/define-config.test.ts",
   "src/utils/config/app-config.test.ts",
+  "src/core/logger/logger.test.ts",
   "src/core/storage/runtime-stores.test.ts",
+  "src/core/observability/observability.test.ts",
   "src/integrations/vector/sqlite-vector-store.test.ts",
+  "src/integrations/publish/providers/weixin-api-client.test.ts",
+  "src/integrations/image/providers/minimax/minimax-image-generator.test.ts",
+  "src/utils/image/safe-image-downloader.test.ts",
   "src/utils/image/image-processor.test.ts",
   "src/features/weixin-article/domain/article-source.test.ts",
   "src/app/weixin-article/fetch/article-fetch-planner.test.ts",
   "src/app/weixin-article/fetch/article-fetch-router.test.ts",
+  "src/app/weixin-article/runtime/article-runtime-config.test.ts",
   "src/registry/provider-registry.test.ts",
   "src/core/workflow/local-workflow-runtime.test.ts",
   "src/utils/llm-output.test.ts",
   "src/modules/content-rank/ai.content-ranker.test.ts",
   "src/features/weixin-article/workflow.test.ts",
+  "src/features/weixin-article/services/article-cover.service.test.ts",
   "src/features/weixin-article/services/article-image-layout.service.test.ts",
   "src/features/weixin-article/services/article-render.service.test.ts",
   "src/features/weixin-article/services/content-scrape.service.test.ts",
@@ -45,10 +52,7 @@ await new Command()
   .action(() => printHelp())
   .command(
     "dev",
-    passthrough("构建 dashboard 并启动本地服务。", async (args) => {
-      await buildDashboard();
-      await run(DENO, ["run", "-A", "src/index.ts", ...args]);
-    }),
+    passthrough("启动本地服务和 dashboard 前端热更新。", runDev),
   )
   .command(
     "doctor",
@@ -416,6 +420,79 @@ async function buildDashboard(extraArgs: string[] = []) {
   ]);
 }
 
+async function runDev(args: string[]) {
+  await buildDashboard();
+  console.log("本地 API / 静态服务: http://localhost:8000");
+  console.log("Dashboard 前端热更新: http://localhost:5173/dashboard/");
+
+  const backend = spawn("backend", DENO, [
+    "run",
+    "-A",
+    "src/index.ts",
+    ...args,
+  ]);
+  const dashboard = spawn("dashboard", DENO, [
+    "run",
+    "--config",
+    "dashboard/deno.json",
+    "-A",
+    "npm:vite@8.0.13",
+    "--config",
+    "dashboard/vite.config.ts",
+    "--host",
+    "0.0.0.0",
+    "--strictPort",
+  ]);
+
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    for (const child of [backend.child, dashboard.child]) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // Process may have already exited.
+      }
+    }
+  };
+
+  try {
+    Deno.addSignalListener("SIGINT", stop);
+    Deno.addSignalListener("SIGTERM", stop);
+  } catch {
+    // Signal listeners are not available in every runtime.
+  }
+
+  const result = await Promise.race([
+    waitChild("backend", backend.child),
+    waitChild("dashboard", dashboard.child),
+  ]);
+
+  const shouldExitFailure = !result.status.success && !stopping;
+  stop();
+  if (shouldExitFailure) {
+    Deno.exit(result.status.code);
+  }
+}
+
+function spawn(label: string, command: string, args: string[]) {
+  console.log(`[${label}] ${command} ${args.join(" ")}`);
+  return {
+    label,
+    child: new Deno.Command(command, {
+      args,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    }).spawn(),
+  };
+}
+
+async function waitChild(label: string, child: Deno.ChildProcess) {
+  return { label, status: await child.status };
+}
+
 async function run(command: string, args: string[]) {
   const child = new Deno.Command(command, {
     args,
@@ -444,7 +521,7 @@ function printCloudflareHelp() {
 
 function printHelp() {
   console.log(`TrendPublish 任务入口:
-  deno task dev                 启动本地服务
+  deno task dev                 启动本地服务 + dashboard 前端热更新
   deno task doctor              检查配置
   deno task verify              发布前完整检查
   deno task test                运行测试
@@ -455,7 +532,7 @@ function printHelp() {
   deno task docker              启动 Docker 服务
   deno task docker relay        启动 relay Docker 服务
   deno task cf deploy           部署 Cloudflare Worker
-  deno task dashboard           启动 dashboard 前端开发服务
+  deno task dashboard           只启动 dashboard 前端开发服务
   deno task docs                启动文档开发服务
 `);
 }

@@ -1,32 +1,42 @@
 import { triggerWorkflow } from "./controllers/workflow.controller.ts";
-import { WorkflowType } from "./controllers/cron.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
 import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
+import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
+import { resolveArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import type {
+  WeixinArticleWorkflowInput,
+} from "@src/app/weixin-article/workflow.definition.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("server");
 
 export interface JSONRPCRequest {
   jsonrpc: string;
   method: string;
-  params: Record<string, any>;
+  params?: Record<string, unknown>;
   id: string | number;
 }
 
 export interface JSONRPCResponse {
   jsonrpc: string;
-  result?: any;
+  result?: unknown;
   error?: {
     code: number;
     message: string;
-    data?: any;
+    data?: unknown;
   };
   id: string | number;
 }
 
 export class JSONRPCServer {
-  private routes: Record<string, (params: Record<string, any>) => Promise<any>>;
+  private routes: Record<
+    string,
+    (params: Record<string, unknown>) => Promise<unknown>
+  >;
 
   constructor() {
     this.routes = {};
@@ -34,7 +44,7 @@ export class JSONRPCServer {
 
   registerRoute(
     method: string,
-    handler: (params: Record<string, any>) => Promise<any>,
+    handler: (params: Record<string, unknown>) => Promise<unknown>,
   ) {
     this.routes[method] = handler;
   }
@@ -171,8 +181,14 @@ async function handleConfigSummaryRequest(req: Request): Promise<Response> {
   const unauthorized = await verifyRequestAuth(req);
   if (unauthorized) return unauthorized;
 
+  const config = await getAppConfig();
+  const stores = createLocalArticleRuntimeStores(config);
+  const runtimeConfig = await resolveArticleRuntimeConfig(
+    stores.runtimeConfigStore,
+    config,
+  );
   return jsonResponse(
-    createDashboardConfigSummary(await getAppConfig(), "local"),
+    createDashboardConfigSummary(runtimeConfig.config, "local"),
   );
 }
 
@@ -184,8 +200,12 @@ async function handleRunsRequest(req: Request, pathname: string) {
   const stores = createLocalArticleRuntimeStores(config);
 
   if (req.method === "POST" && pathname === "/api/runs") {
-    const payload = await req.json().catch(() => ({})) as Record<string, any>;
-    const runId = payload.runId ?? `manual-${crypto.randomUUID()}`;
+    const payload = await req.json().catch(
+      () => ({}),
+    ) as WeixinArticleWorkflowInput;
+    const runId = typeof payload.runId === "string"
+      ? payload.runId
+      : `manual-${crypto.randomUUID()}`;
     const runtime = new LocalWorkflowRuntime();
     await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
       payload: {
@@ -336,6 +356,23 @@ const handler = async (req: Request): Promise<Response> => {
     if (req.method === "GET" && url.pathname === "/api/config/summary") {
       return await handleConfigSummaryRequest(req);
     }
+    if (
+      url.pathname === "/api/config/providers" ||
+      url.pathname.startsWith("/api/config/capabilities") ||
+      url.pathname.startsWith("/api/config/features/article/profiles")
+    ) {
+      const unauthorized = await verifyRequestAuth(req);
+      if (unauthorized) return unauthorized;
+      const config = await getAppConfig();
+      const stores = createLocalArticleRuntimeStores(config);
+      const response = await handleRuntimeConfigApi(
+        req,
+        url.pathname,
+        stores.runtimeConfigStore,
+        config,
+      );
+      if (response) return response;
+    }
     if (url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")) {
       return await handleRunsRequest(req, url.pathname);
     }
@@ -412,10 +449,10 @@ const handler = async (req: Request): Promise<Response> => {
   }
 };
 
-export default function startServer(port = 8000) {
+export default async function startServer(port = 8000) {
   Deno.serve({ port }, handler);
-  console.log(`JSON-RPC 服务器运行在 http://localhost:${port}`);
-  console.log("支持的方法:");
-  console.log("- triggerWorkflow");
-  console.log(`默认工作流: ${WorkflowType.WeixinArticle}`);
+  logger.info(`服务监听在 http://0.0.0.0:${port}`);
+  logger.info("dashboard 地址: http://localhost:8000/dashboard");
+  const config = await getAppConfig();
+  logger.info("api key: " + config.server.apiKey);
 }

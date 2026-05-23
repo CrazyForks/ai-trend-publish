@@ -1,8 +1,13 @@
 import { WorkflowType } from "./cron.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
-import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
+import {
+  createLocalWeixinArticleWorkflowDefinition,
+} from "@src/app/weixin-article/local-workflow.definition.ts";
+import type {
+  WeixinArticleWorkflowInput,
+} from "@src/app/weixin-article/workflow.definition.ts";
 
-export async function triggerWorkflow(params: Record<string, any>) {
+export async function triggerWorkflow(params: Record<string, unknown>) {
   const { workflowType = WorkflowType.WeixinArticle, ...payload } = params;
 
   if (workflowType !== WorkflowType.WeixinArticle) {
@@ -12,10 +17,13 @@ export async function triggerWorkflow(params: Record<string, any>) {
   }
 
   const runtime = new LocalWorkflowRuntime();
-  const runId = payload.runId ?? `manual-${crypto.randomUUID()}`;
+  const workflowPayload = payload as WeixinArticleWorkflowInput;
+  const runId = typeof workflowPayload.runId === "string"
+    ? workflowPayload.runId
+    : `manual-${crypto.randomUUID()}`;
   await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
     payload: {
-      ...payload,
+      ...workflowPayload,
       runId,
       trigger: "manual",
     },

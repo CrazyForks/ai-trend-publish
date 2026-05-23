@@ -5,6 +5,7 @@ import {
   RerankerOptions,
   RerankerProvider,
 } from "@src/core/ports/reranker.ts";
+import { HttpClient } from "@src/utils/http/http-client.ts";
 import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina Reranker API Request
@@ -34,7 +35,7 @@ const JinaRerankerResponseSchema = z.object({
   }).optional(), // The entire usage object can be optional
   results: z.array(JinaRerankerResultSchema),
   message: z.string().optional(), // For potential error messages from API
-  detail: z.any().optional(), // For more detailed errors
+  detail: z.unknown().optional(), // For more detailed errors
 });
 
 export interface JinaRerankerProviderConfig {
@@ -47,7 +48,10 @@ export class JinaRerankerProvider implements RerankerProvider {
   private defaultModel: string;
   private jinaApiUrl = "https://api.jina.ai/v1/rerank";
 
-  constructor(private readonly config?: JinaRerankerProviderConfig) {
+  constructor(
+    private readonly config?: JinaRerankerProviderConfig,
+    private readonly httpClient = HttpClient.getInstance(),
+  ) {
     // Recommended default by Jina for general purpose multilingual reranking.
     this.defaultModel = config?.model || "jina-reranker-v2-base-multilingual";
   }
@@ -94,7 +98,7 @@ export class JinaRerankerProvider implements RerankerProvider {
     );
 
     try {
-      const response = await fetch(this.jinaApiUrl, {
+      const result = await this.httpClient.request<unknown>(this.jinaApiUrl, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.apiKey}`,
@@ -102,39 +106,9 @@ export class JinaRerankerProvider implements RerankerProvider {
           "Accept": "application/json",
         },
         body: JSON.stringify(requestBody),
+        retries: 1,
+        timeout: 30000,
       });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let errorMessage =
-          `Jina Reranker API request failed with status ${response.status}`;
-        try {
-          const errJson = JSON.parse(errorBody);
-          // Jina errors might be in `detail` or `message`
-          if (errJson.detail && typeof errJson.detail === "string") {
-            errorMessage =
-              `Jina Reranker API Error: ${errJson.detail} (Status: ${response.status})`;
-          } else if (Array.isArray(errJson.detail) && errJson.detail[0]?.msg) {
-            errorMessage = `Jina Reranker API Error: ${
-              errJson.detail[0].msg
-            } (Status: ${response.status})`;
-          } else if (errJson.detail && errJson.detail.msg) { // FastAPI validation errors
-            errorMessage =
-              `Jina Reranker API Error: ${errJson.detail.msg} (Status: ${response.status})`;
-          } else if (errJson.message) {
-            errorMessage =
-              `Jina Reranker API Error: ${errJson.message} (Status: ${response.status})`;
-          } else {
-            errorMessage += `: ${errorBody}`;
-          }
-        } catch {
-          errorMessage += `: ${errorBody}`;
-        }
-        console.error(`[JinaRerankerProvider] ${errorMessage}`);
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
       const parsedResult = JinaRerankerResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {

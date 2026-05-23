@@ -6,6 +6,7 @@ import {
   ScraperOptions,
   // Media, // Media is unlikely to be directly from deepsearch text results
 } from "@src/core/ports/content-scraper.ts";
+import { HttpClient } from "@src/utils/http/http-client.ts";
 import { z } from "npm:zod@3.25.76";
 
 // Zod Schema for Jina DeepSearch API Request (minimal)
@@ -94,7 +95,10 @@ export class JinaDeepSearchScraper implements ContentScraper {
   private apiKey = "";
   private deepSearchApiUrl = "https://deepsearch.jina.ai/v1/chat/completions";
 
-  constructor(private readonly configuredApiKey?: string) {}
+  constructor(
+    private readonly configuredApiKey?: string,
+    private readonly httpClient = HttpClient.getInstance(),
+  ) {}
 
   async refresh(): Promise<void> {
     this.apiKey = this.configuredApiKey ?? "";
@@ -127,36 +131,20 @@ export class JinaDeepSearchScraper implements ContentScraper {
     });
 
     try {
-      const response = await fetch(this.deepSearchApiUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
+      const result = await this.httpClient.request<unknown>(
+        this.deepSearchApiUrl,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          retries: 1,
+          timeout: 60000,
         },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(
-          `[JinaDeepSearchScraper] API request failed with status ${response.status}: ${errorBody}`,
-        );
-        // Attempt to parse Jina specific error structure if available
-        try {
-          const errJson = JSON.parse(errorBody);
-          if (errJson && errJson.error && errJson.error.message) {
-            throw new Error(
-              `Jina DeepSearch API Error: ${errJson.error.message} (Status: ${response.status})`,
-            );
-          }
-        } catch { /* ignore parsing error, throw original text */ }
-        throw new Error(
-          `Jina DeepSearch API request failed with status ${response.status}: ${errorBody}`,
-        );
-      }
-
-      const result = await response.json();
+      );
       const parsedResult = DeepSearchResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {

@@ -48,6 +48,9 @@ ${profile.preferredTopics.map((item) => `- ${item}`).join("\n")}
 当前 profile 的重点判断：
 ${profile.selectionFocus.map((item) => `- ${item}`).join("\n")}
 
+适合写成文章的角度：
+${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
+
 低价值信号：
 ${profile.lowValueSignals.map((item) => `- ${item}`).join("\n")}
 
@@ -65,7 +68,8 @@ ${profile.lowValueSignals.map((item) => `- ${item}`).join("\n")}
 3. 只输出 ID 和分数，不输出解释、标题、Markdown、JSON 或 <think> 标签
 4. 不要输出推理过程
 5. 如果文章不符合“${profile.label}”定位，分数应低于 40
-6. 如果内容质量太差或重复，可以不返回该文章`;
+6. 如果文章虽然相关但缺少可写角度，只给低分，不要因为关键词匹配而高分
+7. 如果内容质量太差或重复，可以不返回该文章`;
 }
 
 export function getUserPrompt(

@@ -8,9 +8,9 @@ import {
   ImageGeneratorType,
 } from "@src/core/ports/image-generator.ts";
 import { TextLogoGenerator } from "@src/integrations/image/providers/text-logo-generator.ts";
-import { PDD920LogoGenerator } from "@src/integrations/image/providers/pdd920-logo-generator.ts";
-import { AliWanX21ImageGenerator } from "@src/integrations/image/providers/aliyun/aliwanx21-image-generator.ts";
-import { AliyunWanxPosterGenerator } from "@src/integrations/image/providers/aliyun/aliwanx-poster-image-generator.ts";
+import { AliyunImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-image-generator.ts";
+import { AliyunPosterImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-poster-image-generator.ts";
+import { MiniMaxImageGenerator } from "@src/integrations/image/providers/minimax/minimax-image-generator.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 
 export interface ImageGeneratorAdapter
@@ -34,28 +34,32 @@ imageGeneratorRegistry.register({
 });
 
 imageGeneratorRegistry.register({
-  id: ImageGeneratorType.PDD920_LOGO,
-  kind: "image",
-  isConfigured: () => true,
-  create: () => new PDD920LogoGenerator(),
-});
-
-imageGeneratorRegistry.register({
-  id: ImageGeneratorType.ALIWANX21,
+  id: ImageGeneratorType.ALIYUN_IMAGE,
   kind: "image",
   isConfigured: (config) => Boolean(config.providers.image.dashscope.apiKey),
   create: (context) =>
-    new AliWanX21ImageGenerator(
+    new AliyunImageGenerator(
       context?.config?.providers.image.dashscope.apiKey,
     ),
 });
 
 imageGeneratorRegistry.register({
-  id: ImageGeneratorType.ALIWANX_POSTER,
+  id: ImageGeneratorType.ALIYUN_POSTER,
   kind: "image",
   isConfigured: (config) => Boolean(config.providers.image.dashscope.apiKey),
   create: (context) =>
-    new AliyunWanxPosterGenerator(
+    new AliyunPosterImageGenerator(
       context?.config?.providers.image.dashscope.apiKey,
+    ),
+});
+
+imageGeneratorRegistry.register({
+  id: ImageGeneratorType.MINIMAX_IMAGE,
+  kind: "image",
+  isConfigured: (config) => Boolean(config.providers.image.minimax.apiKey),
+  create: (context) =>
+    new MiniMaxImageGenerator(
+      context?.config?.providers.image.minimax.apiKey,
+      context?.config?.providers.image.minimax.apiHost,
     ),
 });

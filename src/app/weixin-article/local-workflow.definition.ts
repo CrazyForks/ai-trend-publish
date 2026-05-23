@@ -4,14 +4,19 @@ import {
 } from "@src/app/weixin-article/workflow.definition.ts";
 import { createLocalWeixinArticleDependencies } from "@src/app/weixin-article/create-local-weixin-article-dependencies.ts";
 import type { WorkflowDefinition } from "@src/core/workflow/workflow-runtime.ts";
+import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
 
 export function createLocalWeixinArticleWorkflowDefinition(): WorkflowDefinition<
   WeixinArticleWorkflowInput
 > {
-  return createWeixinArticleWorkflowDefinition(
-    async (config, event) =>
+  return createWeixinArticleWorkflowDefinition({
+    runtimeConfigStoreFactory: async (config) =>
+      createLocalArticleRuntimeStores(config).runtimeConfigStore,
+    dependencyFactory: async (config, event, runtimeConfig) =>
       await createLocalWeixinArticleDependencies(config, {
         outputDir: event.payload.dryRunOutputDir,
+        profileId: runtimeConfig?.profile.id,
+        runtimeConfigSnapshot: runtimeConfig?.snapshot,
       }),
-  );
+  });
 }

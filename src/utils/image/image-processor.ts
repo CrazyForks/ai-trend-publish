@@ -1,5 +1,6 @@
 // src/utils/image/image-processor.ts
 import { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
+import { SafeImageDownloader } from "@src/utils/image/safe-image-downloader.ts";
 
 interface ImageValidationResult {
   isValid: boolean;
@@ -8,7 +9,7 @@ interface ImageValidationResult {
 }
 
 interface ImageDownloadResult extends ImageValidationResult {
-  imageBuffer?: ArrayBuffer;
+  imageBuffer?: Uint8Array;
 }
 
 interface ImageProcessResult {
@@ -24,18 +25,16 @@ interface ExtractedImageUrl {
 
 export class WeixinImageProcessor {
   private static readonly MAX_IMAGE_SIZE = 1024 * 1024; // 1MB
-  private static readonly VALID_IMAGE_EXTENSIONS = [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".webp",
-  ];
 
   private imageUploader: ContentImageUploader;
+  private imageDownloader: SafeImageDownloader;
 
-  constructor(imageUploader: ContentImageUploader) {
+  constructor(
+    imageUploader: ContentImageUploader,
+    imageDownloader = new SafeImageDownloader(),
+  ) {
     this.imageUploader = imageUploader;
+    this.imageDownloader = imageDownloader;
   }
 
   /**
@@ -45,7 +44,7 @@ export class WeixinImageProcessor {
    * @returns 压缩后的Buffer
    */
   private async compressImage(
-    imageBuffer: ArrayBuffer,
+    imageBuffer: ArrayBuffer | Uint8Array,
     maxSizeInMB: number = 1,
   ): Promise<Uint8Array> {
     try {
@@ -53,8 +52,11 @@ export class WeixinImageProcessor {
         "https://deno.land/x/imagescript@1.2.17/mod.ts"
       );
       // 解码图片
-      const image = await decode(new Uint8Array(imageBuffer));
-      const originalSize = imageBuffer.byteLength / (1024 * 1024); // 转换为MB
+      const bytes = imageBuffer instanceof Uint8Array
+        ? imageBuffer
+        : new Uint8Array(imageBuffer);
+      const image = await decode(bytes);
+      const originalSize = bytes.byteLength / (1024 * 1024); // 转换为MB
 
       // 根据原始大小决定压缩策略
       let quality: number;
@@ -130,12 +132,19 @@ export class WeixinImageProcessor {
           console.log(
             `压缩后大小: ${(processedImage.length / 1024 / 1024).toFixed(2)}MB`,
           );
+          if (processedImage.byteLength > WeixinImageProcessor.MAX_IMAGE_SIZE) {
+            results.push({
+              originalUrl: image.originalUrl,
+              error: "图片压缩后仍超过微信正文图片大小限制",
+            });
+            continue;
+          }
         }
 
         // 上传图片到微信
         const newUrl = await this.imageUploader.uploadContentImage(
           image.fetchUrl,
-          processedImage ? processedImage : new Uint8Array(imageBuffer),
+          processedImage ?? imageBuffer,
         );
 
         results.push({
@@ -208,40 +217,12 @@ export class WeixinImageProcessor {
    */
   private async downloadImage(url: string): Promise<ImageDownloadResult> {
     try {
-      const urlObj = new URL(url);
-      const extension = urlObj.pathname.toLowerCase().split(".").pop();
-
-      if (
-        !extension ||
-        !WeixinImageProcessor.VALID_IMAGE_EXTENSIONS.includes(`.${extension}`)
-      ) {
-        return {
-          isValid: false,
-          error: "不支持的图片格式",
-        };
-      }
-
-      const response = await fetch(url);
-      if (!response.ok) {
-        return {
-          isValid: false,
-          error: `图片下载失败: HTTP ${response.status}`,
-        };
-      }
-
-      const contentType = response.headers.get("content-type");
-
-      if (!contentType || !contentType.startsWith("image/")) {
-        return {
-          isValid: false,
-          error: "无效的Content-Type: " + contentType,
-        };
-      }
+      const downloaded = await this.imageDownloader.download(url);
 
       return {
         isValid: true,
-        contentType,
-        imageBuffer: await response.arrayBuffer(),
+        contentType: downloaded.contentType,
+        imageBuffer: downloaded.bytes,
       };
     } catch (error) {
       return {

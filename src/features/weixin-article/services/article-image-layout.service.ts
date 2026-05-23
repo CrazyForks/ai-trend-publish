@@ -22,7 +22,7 @@ export interface ArticleImageLayoutOptions {
 
 interface AiImageGeneratorResolver {
   getGenerator(
-    type: ImageGeneratorType.ALIWANX21,
+    type: ImageGeneratorType.ALIYUN_IMAGE | ImageGeneratorType.MINIMAX_IMAGE,
     needRefresh?: boolean,
   ): Promise<ImageGenerator<AiBodyImageRequest, string>>;
 }
@@ -30,6 +30,7 @@ interface AiImageGeneratorResolver {
 interface AiBodyImageRequest {
   prompt: string;
   size?: string;
+  model?: string;
 }
 
 interface AiImageLayoutConfig {
@@ -37,6 +38,10 @@ interface AiImageLayoutConfig {
   imageCount: number;
   onlyWhenNoMedia: boolean;
   imageSize: string;
+  imageModel?: string;
+  imageGeneratorType:
+    | ImageGeneratorType.ALIYUN_IMAGE
+    | ImageGeneratorType.MINIMAX_IMAGE;
   promptProfile?: PromptProfileName;
 }
 
@@ -45,6 +50,8 @@ const DEFAULT_AI_IMAGE_LAYOUT_CONFIG: AiImageLayoutConfig = {
   imageCount: 1,
   onlyWhenNoMedia: false,
   imageSize: "1024*1024",
+  imageModel: "qwen-image-2.0",
+  imageGeneratorType: ImageGeneratorType.ALIYUN_IMAGE,
   promptProfile: "technology",
 };
 
@@ -181,7 +188,7 @@ export class AiArticleImageLayoutService implements ArticleImageLayoutService {
     }
 
     const generator = await this.imageGeneratorResolver.getGenerator(
-      ImageGeneratorType.ALIWANX21,
+      this.config.imageGeneratorType,
     );
     const generatedMedia: Media[] = [];
 
@@ -189,6 +196,7 @@ export class AiArticleImageLayoutService implements ArticleImageLayoutService {
       const url = await generator.generate({
         prompt: this.buildImagePrompt(article, index),
         size: await this.getImageSize(),
+        model: await this.getImageModel(),
       });
       if (typeof url !== "string") {
         throw new Error("正文配图生成结果不是图片 URL");
@@ -225,6 +233,10 @@ export class AiArticleImageLayoutService implements ArticleImageLayoutService {
 
   private async getImageSize(): Promise<string> {
     return this.config.imageSize;
+  }
+
+  private async getImageModel(): Promise<string | undefined> {
+    return this.config.imageModel;
   }
 
   private buildImagePrompt(article: WeixinTemplate, index: number): string {

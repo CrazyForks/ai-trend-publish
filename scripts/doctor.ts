@@ -85,6 +85,7 @@ function checkFiles(configPath?: string) {
     "trendpublish.config.cloudflare.ts",
     "wrangler.jsonc",
     "migrations/0001_article_workflow_state.sql",
+    "migrations/0002_runtime_config_center.sql",
     "src/features/weixin-article/rendering/template-registry.ts",
     "src/features/weixin-article/rendering/templates/article.ejs",
     "src/features/weixin-article/rendering/templates/article.modern.ejs",
@@ -265,11 +266,10 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
 
   checkProviderFeature(
     "封面生图",
-    `阿里云百炼 / DashScope (${config.features.article.cover.provider})`,
+    `图片生成 (${config.features.article.cover.provider})`,
     config.features.article.cover.enabled,
-    imageGeneratorRegistry.get(ImageGeneratorType.ALIWANX_POSTER)
-      .isConfigured(config),
-    ["providers.image.dashscope.apiKey"],
+    getImageGeneratorCheck(config, "cover").configured,
+    getImageGeneratorCheck(config, "cover").requiredPaths,
     "未开启时封面生成会走本地兜底图。",
   );
 
@@ -277,9 +277,8 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
     "正文配图",
     `AI 智能配图 (${config.features.article.bodyImages.provider})`,
     config.features.article.bodyImages.mode !== "off",
-    imageGeneratorRegistry.get(ImageGeneratorType.ALIWANX21)
-      .isConfigured(config),
-    ["providers.image.dashscope.apiKey"],
+    getImageGeneratorCheck(config, "body").configured,
+    getImageGeneratorCheck(config, "body").requiredPaths,
     "开启后会按文章内容生成正文配图，失败时回退已有 media 图片布局。",
   );
 
@@ -322,7 +321,46 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
       : `D1 binding: ${config.storage.vector.d1Binding}`,
   );
 
+  add(
+    config.storage.runtimeConfig.provider === "sqlite"
+      ? hasValue(config.storage.runtimeConfig.sqlitePath) ? "pass" : "fail"
+      : hasValue(config.storage.runtimeConfig.d1Binding)
+      ? "pass"
+      : "fail",
+    "运行时配置",
+    "Dashboard 可编辑配置存储",
+    config.storage.runtimeConfig.provider === "sqlite"
+      ? `SQLite: ${config.storage.runtimeConfig.sqlitePath}`
+      : `D1 binding: ${config.storage.runtimeConfig.d1Binding}`,
+  );
+
   checkNotificationChannels(config);
+}
+
+function getImageGeneratorCheck(
+  config: ResolvedTrendPublishConfig,
+  usage: "cover" | "body",
+): { configured: boolean; requiredPaths: string[] } {
+  const provider = usage === "cover"
+    ? config.features.article.cover.provider
+    : config.features.article.bodyImages.provider;
+  switch (provider) {
+    case "dashscope": {
+      const type = usage === "cover"
+        ? ImageGeneratorType.ALIYUN_POSTER
+        : ImageGeneratorType.ALIYUN_IMAGE;
+      return {
+        configured: imageGeneratorRegistry.get(type).isConfigured(config),
+        requiredPaths: ["providers.image.dashscope.apiKey"],
+      };
+    }
+    case "minimax":
+      return {
+        configured: imageGeneratorRegistry.get(ImageGeneratorType.MINIMAX_IMAGE)
+          .isConfigured(config),
+        requiredPaths: ["providers.image.minimax.apiKey"],
+      };
+  }
 }
 
 function checkNotificationChannels(config: ResolvedTrendPublishConfig) {

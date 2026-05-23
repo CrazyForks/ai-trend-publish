@@ -130,7 +130,7 @@ export default defineConfig((runtime) => {
           provider: "dashscope",
           model: runtime.value(
             "COVER_MODEL",
-            "wanx-poster-generation-v1",
+            "qwen-image-2.0-pro",
           ),
         },
         bodyImages: {
@@ -161,6 +161,10 @@ export default defineConfig((runtime) => {
       runState: {
         provider: "kv-d1",
         kvBinding: "ARTICLE_RUNS",
+        d1Binding: "ARTICLE_DB",
+      },
+      runtimeConfig: {
+        provider: "d1",
         d1Binding: "ARTICLE_DB",
       },
       vector: {

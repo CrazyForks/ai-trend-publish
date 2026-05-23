@@ -1,4 +1,4 @@
-export interface WorkflowEvent<TInput = any> {
+export interface WorkflowEvent<TInput = unknown> {
   payload: TInput;
   id: string;
   timestamp: number;
@@ -22,7 +22,7 @@ export interface WorkflowStepContext {
   sleep(reason: string, duration: string | number): Promise<void>;
 }
 
-export interface WorkflowDefinition<TInput = any, TOutput = void> {
+export interface WorkflowDefinition<TInput = unknown, TOutput = void> {
   id: string;
   run(
     event: WorkflowEvent<TInput>,

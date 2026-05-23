@@ -10,6 +10,7 @@ Deno.test("postProcessDynamicHtml cleans incompatible tags and attributes", () =
   const result = postProcessDynamicHtml(`
     \`\`\`html
     <div class="card" id="root" onclick="alert(1)" style="color:#111;">
+      <!-- 不应该保留到公众号正文 -->
       <style>.x{color:red}</style>
       <script>alert(1)</script>
       <p>AI正在改变软件工程</p>
@@ -25,6 +26,7 @@ Deno.test("postProcessDynamicHtml cleans incompatible tags and attributes", () =
   assert(!/\sclass=/i.test(result.html));
   assert(!/\sid=/i.test(result.html));
   assert(!/\sonclick=/i.test(result.html));
+  assert(!/<!--/.test(result.html));
   assertStringIncludes(result.html, "AI 正在改变软件工程");
   assertStringIncludes(result.html, "参考链接");
   assertEquals(result.footnotes, ["https://example.com/source"]);

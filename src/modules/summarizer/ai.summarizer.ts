@@ -11,7 +11,7 @@ import {
 } from "@src/prompts/summarizer.prompt.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";
-import { cleanLLMJsonText, cleanLLMText } from "@src/utils/llm-output.ts";
+import { cleanLLMJsonText, cleanLLMTitle } from "@src/utils/llm-output.ts";
 import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 
 const logger = new Logger("ai-summarizer");
@@ -104,7 +104,7 @@ export class AISummarizer implements ContentSummarizer {
       if (!title) {
         throw new Error("未获取到有效的标题");
       }
-      const cleanedTitle = cleanLLMText(title);
+      const cleanedTitle = cleanLLMTitle(title);
       if (!cleanedTitle) {
         throw new Error("标题生成结果为空");
       }

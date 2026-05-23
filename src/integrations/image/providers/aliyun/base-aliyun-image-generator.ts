@@ -15,13 +15,36 @@ export interface AliTaskResponse {
   };
 }
 
+export interface AliTaskOutput {
+  task_status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  task_id?: string;
+  results?: Array<{ url: string }>;
+  render_urls?: string[];
+  [key: string]: unknown;
+}
+
 /**
  * 阿里云基础任务状态响应接口
  */
 export interface AliTaskStatusResponse {
   request_id: string;
-  // deno-lint-ignore no-explicit-any
-  output: any;
+  output: AliTaskOutput;
+}
+
+interface AliyunMultimodalGenerationResponse {
+  request_id?: string;
+  output?: {
+    choices?: Array<{
+      message?: {
+        content?: Array<{
+          image?: string;
+          url?: string;
+          text?: string;
+          [key: string]: unknown;
+        }>;
+      };
+    }>;
+  };
 }
 
 /**
@@ -63,7 +86,7 @@ export abstract class BaseAliyunImageGenerator<
    * 提交任务到阿里云服务
    */
   protected async submitTask<T extends AliTaskResponse>(
-    payload: any,
+    payload: Record<string, unknown>,
   ): Promise<T> {
     try {
       logger.debug(`提交任务到阿里云服务: ${this.baseUrl}`, {
@@ -89,7 +112,7 @@ export abstract class BaseAliyunImageGenerator<
         response: response.data,
       });
       return response.data;
-    } catch (error: any) {
+    } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new Error(
           `阿里云API调用失败: ${
@@ -118,7 +141,7 @@ export abstract class BaseAliyunImageGenerator<
         },
       );
       return response.data.output;
-    } catch (error: any) {
+    } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new Error(
           `任务状态检查失败: ${error.response?.data?.message || error.message}`,
@@ -127,6 +150,47 @@ export abstract class BaseAliyunImageGenerator<
       throw error;
     }
   }
+
+  protected async generateMultimodalImage(
+    model: string,
+    prompt: string,
+    parameters: Record<string, unknown> = {},
+  ): Promise<string> {
+    try {
+      const response = await axios.post<AliyunMultimodalGenerationResponse>(
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        {
+          model,
+          input: {
+            messages: [
+              {
+                role: "user",
+                content: [{ text: prompt }],
+              },
+            ],
+          },
+          parameters,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${this.apiKey}`,
+          },
+        },
+      );
+      return extractMultimodalImageUrl(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `阿里云图片生成失败: ${
+            error.response?.data?.message || error.message
+          }`,
+        );
+      }
+      throw error;
+    }
+  }
+
   /**
    * 获取结果
    */
@@ -172,4 +236,20 @@ export abstract class BaseAliyunImageGenerator<
     if (value === undefined) return defaultValue;
     return Math.min(Math.max(value, min), max);
   }
+}
+
+function extractMultimodalImageUrl(
+  response: AliyunMultimodalGenerationResponse,
+): string {
+  for (const choice of response.output?.choices ?? []) {
+    for (const item of choice.message?.content ?? []) {
+      if (typeof item.image === "string" && item.image.trim()) {
+        return item.image;
+      }
+      if (typeof item.url === "string" && item.url.trim()) {
+        return item.url;
+      }
+    }
+  }
+  throw new Error("阿里云图片生成成功但未返回图片 URL");
 }

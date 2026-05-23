@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   cleanLLMJsonText,
   cleanLLMText,
+  cleanLLMTitle,
   normalizeLLMResponse,
   stripMarkdownFence,
   stripThinkTags,
@@ -35,6 +36,20 @@ Deno.test("cleanLLMText strips think tags, fences and wrapping quotes", () => {
 `);
 
   assertEquals(result, "今日 AI 速递");
+});
+
+Deno.test("cleanLLMTitle picks final title and drops reasoning labels", () => {
+  const result = cleanLLMTitle(`
+<think>让我分析这些文章。</think>
+以下是建议：
+标题：OpenAI 更新开发者工具链
+`);
+
+  assertEquals(result, "OpenAI 更新开发者工具链");
+});
+
+Deno.test("cleanLLMTitle rejects reasoning-only output", () => {
+  assertEquals(cleanLLMTitle("<think>让我分析这几篇文章</think>"), "");
 });
 
 Deno.test("stripMarkdownFence handles language fences", () => {

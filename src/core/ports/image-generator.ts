@@ -43,7 +43,7 @@ export interface ImageGenerator<
  */
 export enum ImageGeneratorType {
   TEXT_LOGO = "TEXT_LOGO",
-  PDD920_LOGO = "PDD920_LOGO",
-  ALIWANX21 = "ALIWANX21",
-  ALIWANX_POSTER = "ALIWANX_POSTER",
+  ALIYUN_IMAGE = "ALIYUN_IMAGE",
+  ALIYUN_POSTER = "ALIYUN_POSTER",
+  MINIMAX_IMAGE = "MINIMAX_IMAGE",
 }

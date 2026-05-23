@@ -4,6 +4,7 @@ import {
 } from "@src/utils/config/app-config.ts";
 import { WeixinPublisher } from "@src/integrations/publish/providers/weixin-publisher.ts";
 import type { PublishArticleRequest } from "@src/core/ports/content-publisher.ts";
+import { redactSensitiveText } from "@src/utils/security/redact.ts";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("weixin-relay");
@@ -72,7 +73,9 @@ Deno.serve({ port }, async (request) => {
 
     return json({ success: false, error: "Not Found" }, { status: 404 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactSensitiveText(
+      error instanceof Error ? error.message : String(error),
+    );
     logger.error("Relay request failed:", message);
     return json({ success: false, error: message }, { status: 500 });
   }

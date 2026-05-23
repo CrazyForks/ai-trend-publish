@@ -1,11 +1,14 @@
 import { HttpClient } from "@src/utils/http/http-client.ts";
 import {
   ChatCompletionOptions,
+  ChatCompletionResponse,
   ChatMessage,
   LLMProvider,
 } from "@src/core/ports/llm.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { normalizeLLMResponse } from "@src/utils/llm-output.ts";
+import { ProviderError } from "@src/core/errors/provider-error.ts";
+import { redactSensitiveText } from "@src/utils/security/redact.ts";
 
 type LLMConfig = ResolvedTrendPublishConfig["providers"]["ai"];
 
@@ -86,10 +89,10 @@ export class OpenAICompatibleLLM implements LLMProvider {
   async createChatCompletion(
     messages: ChatMessage[],
     options: ChatCompletionOptions = {},
-  ): Promise<any> {
+  ): Promise<ChatCompletionResponse> {
     try {
       // 使用HttpClient进行请求，自动处理重试和超时
-      const response = await this.httpClient.request(
+      const response = await this.httpClient.request<ChatCompletionResponse>(
         `${this.baseURL}/chat/completions`,
         {
           method: "POST",
@@ -113,7 +116,14 @@ export class OpenAICompatibleLLM implements LLMProvider {
       );
       return normalizeLLMResponse(response);
     } catch (error) {
-      throw new Error(`创建聊天完成失败: ${(error as Error).message}`);
+      throw new ProviderError({
+        provider: "openai-compatible",
+        kind: "invalid_response",
+        message: `创建聊天完成失败: ${
+          redactSensitiveText(error instanceof Error ? error.message : error)
+        }`,
+        cause: error,
+      });
     }
   }
 }

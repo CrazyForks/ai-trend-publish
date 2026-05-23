@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { WeixinImageProcessor } from "@src/utils/image/image-processor.ts";
 import type { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
+import { SafeImageDownloader } from "@src/utils/image/safe-image-downloader.ts";
 
 Deno.test("WeixinImageProcessor decodes escaped signed URLs and avoids unsigned duplicate extraction", async () => {
   const originalFetch = globalThis.fetch;
@@ -29,7 +30,13 @@ Deno.test("WeixinImageProcessor decodes escaped signed URLs and avoids unsigned 
   };
 
   try {
-    const processor = new WeixinImageProcessor(uploader);
+    const processor = new WeixinImageProcessor(
+      uploader,
+      new SafeImageDownloader({
+        fetchImpl: globalThis.fetch,
+        resolveHostname: async () => ["93.184.216.34"],
+      }),
+    );
     const result = await processor.processContent(
       `<p><img src="${escapedUrl}" alt="test"></p>`,
     );

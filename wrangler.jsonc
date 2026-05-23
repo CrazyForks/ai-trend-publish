@@ -44,7 +44,7 @@
     }
   ],
   "triggers": {
-    "crons": ["0 19 * * *"]
+    "crons": ["*/5 * * * *"]
   },
   "workflows": [
     {

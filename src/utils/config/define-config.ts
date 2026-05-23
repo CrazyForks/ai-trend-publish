@@ -20,7 +20,7 @@ export type FetchProviderName =
   | "rss";
 
 export type ArticlePublisherProvider = "weixin" | "weixin-relay";
-export type ArticleImageProvider = "dashscope";
+export type ArticleImageProvider = "dashscope" | "minimax";
 export type ArticleEmbeddingProvider = "dashscope";
 export type ArticleVectorStoreProvider = "sqlite" | "d1";
 export type ArticleNotificationChannel = "bark" | "dingtalk" | "feishu";
@@ -94,9 +94,15 @@ export interface FetchProvidersConfig {
 
 /** 图片生成供应商凭证。是否启用图片功能由 features.article 决定。 */
 export interface ImageProvidersConfig {
-  /** DashScope / 阿里云百炼 API Key，用于封面图和正文配图生成。 */
+  /** 阿里云图片生成 API Key，用于封面图和正文配图生成。 */
   dashscope?: {
     apiKey?: string;
+  };
+  /** MiniMax 图片生成 API Key。支持 image-01 文生图。 */
+  minimax?: {
+    apiKey?: string;
+    /** MiniMax API Host，默认 https://api.minimax.io；国内站可用 https://api.minimaxi.com。 */
+    apiHost?: string;
   };
 }
 
@@ -213,9 +219,9 @@ export interface ArticleNotificationsConfig {
 export interface ArticleCoverConfig {
   /** 是否生成封面图。生成失败时会回退到内置兜底封面。 */
   enabled?: boolean;
-  /** 封面图生成 provider。当前只支持 "dashscope"。 */
+  /** 封面图生成 provider。支持 "dashscope" 和 "minimax"。 */
   provider?: ArticleImageProvider;
-  /** provider 模型 ID，例如 "wanx-poster-generation-v1"。 */
+  /** provider 模型 ID，例如 DashScope 的 "qwen-image-2.0-pro" 或 MiniMax 的 "image-01"。 */
   model?: string;
 }
 
@@ -229,8 +235,10 @@ export interface ArticleBodyImagesConfig {
    * - "all": 每篇文章都尝试生成正文配图。
    */
   mode?: ArticleBodyImageMode;
-  /** 正文配图 provider。当前只支持 "dashscope"。 */
+  /** 正文配图 provider。支持 "dashscope" 和 "minimax"。 */
   provider?: ArticleImageProvider;
+  /** provider 模型 ID，例如 DashScope 的 "qwen-image-2.0" 或 MiniMax 的 "image-01"。 */
+  model?: string;
   /** 每篇文章最多生成几张正文配图。 */
   count?: number;
   /** 图片尺寸字符串，例如 "1024*1024"。 */
@@ -309,14 +317,85 @@ export interface VectorStorageConfig {
   d1Binding?: "ARTICLE_DB" | string;
 }
 
-/** 存储配置。运行配置不会存入数据库。 */
+export interface RuntimeConfigStorageConfig {
+  /** 运行时配置存储后端。本地/Docker 默认 sqlite，Cloudflare 默认 d1。 */
+  provider?: "sqlite" | "d1";
+  /** 本地 SQLite 数据库文件路径，默认复用 src/temp/trendpublish.sqlite3。 */
+  sqlitePath?: string;
+  /** Cloudflare D1 binding 名称，默认 ARTICLE_DB。 */
+  d1Binding?: "ARTICLE_DB" | string;
+}
+
+/** 存储配置。部署级配置仍在 TS 中，Dashboard 运行时业务配置可存入 SQLite/D1。 */
 export interface StorageConfig {
   /** 工作流产物存储。 */
   artifacts?: ArtifactStorageConfig;
   /** 工作流运行状态和步骤记录存储。 */
   runState?: RunStateStorageConfig;
+  /** Dashboard 可编辑的运行时业务配置。 */
+  runtimeConfig?: RuntimeConfigStorageConfig;
   /** 向量去重存储。 */
   vector?: VectorStorageConfig;
+}
+
+export interface ObservabilityHttpSinkConfig {
+  /** 是否启用 HTTP 观测上报。 */
+  enabled?: boolean;
+  /** HTTP ingest endpoint，例如 Axiom / Better Stack / 自建 OTel collector 的日志入口。 */
+  endpoint?: string;
+  /** Bearer token。会被日志脱敏，不会写入 artifact。 */
+  bearerToken?: string;
+  /** 自定义请求头，例如 { "X-Axiom-Token": "...", "X-Axiom-Dataset": "trendpublish" }。 */
+  headers?: Record<string, string>;
+  /** 请求体格式。Axiom 推荐 array，Better Stack / 通用 HTTP 通常用 object。 */
+  format?: "object" | "array" | "ndjson";
+  /** 单次上报超时时间，默认 5000ms。 */
+  timeoutMs?: number;
+}
+
+export interface ObservabilityAxiomConfig {
+  /** 是否启用 Axiom 上报。 */
+  enabled?: boolean;
+  /** Axiom dataset 名称。 */
+  dataset?: string;
+  /** Axiom ingest API token。 */
+  token?: string;
+  /** Axiom API 域名，默认 https://api.axiom.co。 */
+  apiUrl?: string;
+  /** 单次上报超时时间，默认 5000ms。 */
+  timeoutMs?: number;
+}
+
+export interface ObservabilityBetterStackConfig {
+  /** 是否启用 Better Stack Logs 上报。 */
+  enabled?: boolean;
+  /** Better Stack source token。 */
+  sourceToken?: string;
+  /** Ingesting host，默认 https://in.logs.betterstack.com。 */
+  ingestingHost?: string;
+  /** 单次上报超时时间，默认 5000ms。 */
+  timeoutMs?: number;
+}
+
+export interface ObservabilityConfig {
+  /** 是否启用 logger 观测镜像。默认 true。 */
+  enabled?: boolean;
+  /** 服务名，默认 trendpublish。 */
+  serviceName?: string;
+  /** 环境名，默认 local。 */
+  environment?: string;
+  /** stdout 镜像输出。原 logger 仍会正常输出；开启后会额外输出结构化日志。 */
+  stdout?: {
+    enabled?: boolean;
+    /** json 适合平台采集，pretty 适合本地肉眼查看。 */
+    format?: "json" | "pretty";
+  };
+  /** 通用 HTTP 上报。Axiom / Better Stack / 自建 collector 都可通过这里接入。 */
+  http?: ObservabilityHttpSinkConfig;
+  /** Axiom 便捷配置。 */
+  axiom?: ObservabilityAxiomConfig;
+  /** Better Stack Logs 便捷配置。 */
+  betterStack?: ObservabilityBetterStackConfig;
 }
 
 /**
@@ -342,6 +421,8 @@ export interface TrendPublishConfig {
   features?: FeaturesConfig;
   /** 业务数据存储。 */
   storage?: StorageConfig;
+  /** 结构化日志和外部观测平台配置。 */
+  observability?: ObservabilityConfig;
 }
 
 export interface ResolvedTrendPublishConfig {
@@ -369,6 +450,10 @@ export interface ResolvedTrendPublishConfig {
     image: {
       dashscope: {
         apiKey: string;
+      };
+      minimax: {
+        apiKey: string;
+        apiHost: string;
       };
     };
     publish: {
@@ -423,6 +508,7 @@ export interface ResolvedTrendPublishConfig {
       bodyImages: {
         mode: ArticleBodyImageMode;
         provider: ArticleImageProvider;
+        model: string;
         count: number;
         size: ArticleImageSize;
       };
@@ -445,10 +531,45 @@ export interface ResolvedTrendPublishConfig {
       kvBinding: string;
       d1Binding: string;
     };
+    runtimeConfig: {
+      provider: "sqlite" | "d1";
+      sqlitePath: string;
+      d1Binding: string;
+    };
     vector: {
       provider: ArticleVectorStoreProvider;
       sqlitePath: string;
       d1Binding: string;
+    };
+  };
+  observability: {
+    enabled: boolean;
+    serviceName: string;
+    environment: string;
+    stdout: {
+      enabled: boolean;
+      format: "json" | "pretty";
+    };
+    http: {
+      enabled: boolean;
+      endpoint: string;
+      bearerToken: string;
+      headers: Record<string, string>;
+      format: "object" | "array" | "ndjson";
+      timeoutMs: number;
+    };
+    axiom: {
+      enabled: boolean;
+      dataset: string;
+      token: string;
+      apiUrl: string;
+      timeoutMs: number;
+    };
+    betterStack: {
+      enabled: boolean;
+      sourceToken: string;
+      ingestingHost: string;
+      timeoutMs: number;
     };
   };
 }
@@ -465,6 +586,8 @@ export function resolveTrendPublishConfig(
   const article = config.features?.article ?? {};
   const articleRenderer = article.renderer ?? {};
   const articlePublisher = article.publisher ?? {};
+  const coverProvider = article.cover?.provider ?? "dashscope";
+  const bodyImageProvider = article.bodyImages?.provider ?? "dashscope";
 
   return {
     server: {
@@ -495,6 +618,11 @@ export function resolveTrendPublishConfig(
       image: {
         dashscope: {
           apiKey: config.providers?.image?.dashscope?.apiKey ?? "",
+        },
+        minimax: {
+          apiKey: config.providers?.image?.minimax?.apiKey ?? "",
+          apiHost: config.providers?.image?.minimax?.apiHost ??
+            "https://api.minimax.io",
         },
       },
       publish: {
@@ -552,12 +680,21 @@ export function resolveTrendPublishConfig(
         },
         cover: {
           enabled: article.cover?.enabled ?? true,
-          provider: article.cover?.provider ?? "dashscope",
-          model: article.cover?.model ?? "wanx-poster-generation-v1",
+          provider: coverProvider,
+          model: resolveArticleImageModel(
+            coverProvider,
+            "cover",
+            article.cover?.model,
+          ),
         },
         bodyImages: {
           mode: article.bodyImages?.mode ?? "off",
-          provider: article.bodyImages?.provider ?? "dashscope",
+          provider: bodyImageProvider,
+          model: resolveArticleImageModel(
+            bodyImageProvider,
+            "body",
+            article.bodyImages?.model,
+          ),
           count: article.bodyImages?.count ?? 1,
           size: article.bodyImages?.size ?? "1024*1024",
         },
@@ -582,6 +719,12 @@ export function resolveTrendPublishConfig(
         kvBinding: config.storage?.runState?.kvBinding ?? "ARTICLE_RUNS",
         d1Binding: config.storage?.runState?.d1Binding ?? "ARTICLE_DB",
       },
+      runtimeConfig: {
+        provider: config.storage?.runtimeConfig?.provider ?? "sqlite",
+        sqlitePath: config.storage?.runtimeConfig?.sqlitePath ??
+          "src/temp/trendpublish.sqlite3",
+        d1Binding: config.storage?.runtimeConfig?.d1Binding ?? "ARTICLE_DB",
+      },
       vector: {
         provider: config.storage?.vector?.provider ??
           article.deduplication?.vectorStore ?? "sqlite",
@@ -590,5 +733,73 @@ export function resolveTrendPublishConfig(
         d1Binding: config.storage?.vector?.d1Binding ?? "ARTICLE_DB",
       },
     },
+    observability: {
+      enabled: config.observability?.enabled ?? true,
+      serviceName: config.observability?.serviceName ?? "trendpublish",
+      environment: config.observability?.environment ?? "local",
+      stdout: {
+        enabled: config.observability?.stdout?.enabled ?? false,
+        format: config.observability?.stdout?.format ?? "json",
+      },
+      http: {
+        enabled: config.observability?.http?.enabled ?? false,
+        endpoint: config.observability?.http?.endpoint ?? "",
+        bearerToken: config.observability?.http?.bearerToken ?? "",
+        headers: config.observability?.http?.headers ?? {},
+        format: config.observability?.http?.format ?? "object",
+        timeoutMs: config.observability?.http?.timeoutMs ?? 5000,
+      },
+      axiom: {
+        enabled: config.observability?.axiom?.enabled ?? false,
+        dataset: config.observability?.axiom?.dataset ?? "",
+        token: config.observability?.axiom?.token ?? "",
+        apiUrl: config.observability?.axiom?.apiUrl ?? "https://api.axiom.co",
+        timeoutMs: config.observability?.axiom?.timeoutMs ?? 5000,
+      },
+      betterStack: {
+        enabled: config.observability?.betterStack?.enabled ?? false,
+        sourceToken: config.observability?.betterStack?.sourceToken ?? "",
+        ingestingHost: config.observability?.betterStack?.ingestingHost ??
+          "https://in.logs.betterstack.com",
+        timeoutMs: config.observability?.betterStack?.timeoutMs ?? 5000,
+      },
+    },
   };
+}
+
+function resolveArticleImageModel(
+  provider: ArticleImageProvider,
+  usage: "cover" | "body",
+  configuredModel?: string,
+): string {
+  if (
+    configuredModel && isCompatibleArticleImageModel(provider, configuredModel)
+  ) {
+    return configuredModel;
+  }
+  return defaultArticleImageModel(provider, usage);
+}
+
+function defaultArticleImageModel(
+  provider: ArticleImageProvider,
+  usage: "cover" | "body",
+): string {
+  switch (provider) {
+    case "dashscope":
+      return usage === "cover" ? "qwen-image-2.0-pro" : "qwen-image-2.0";
+    case "minimax":
+      return "image-01";
+  }
+}
+
+function isCompatibleArticleImageModel(
+  provider: ArticleImageProvider,
+  model: string,
+): boolean {
+  switch (provider) {
+    case "dashscope":
+      return !model.startsWith("image-");
+    case "minimax":
+      return !model.startsWith("qwen-") && !model.startsWith("wanx-");
+  }
 }

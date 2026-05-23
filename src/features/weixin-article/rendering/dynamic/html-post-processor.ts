@@ -23,6 +23,7 @@ export function postProcessDynamicHtml(
 ): DynamicHtmlPostProcessResult {
   let html = stripMarkdownFence(input).trim();
   html = stripDocumentShell(html);
+  html = stripHtmlComments(html);
   html = removeBannedBlocks(html);
   html = convertDivToSection(html);
   html = convertListsToSections(html);
@@ -59,6 +60,10 @@ function removeBannedBlocks(input: string): string {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "");
+}
+
+function stripHtmlComments(input: string): string {
+  return input.replace(/<!--[\s\S]*?-->/g, "");
 }
 
 function convertDivToSection(input: string): string {
@@ -191,7 +196,22 @@ function mergeStyle(base: string, extra?: string): string {
   if (!extra) {
     return base;
   }
-  return `${base}${base.endsWith(";") ? "" : ";"}${extra}`;
+  const seen = new Set<string>();
+  const declarations = [...splitStyle(base), ...splitStyle(extra)]
+    .filter((declaration) => {
+      const key = declaration.split(":")[0]?.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  return declarations.join(";") + ";";
+}
+
+function splitStyle(style: string): string[] {
+  return style
+    .split(";")
+    .map((item) => item.trim())
+    .filter((item) => item.includes(":"));
 }
 
 function escapeAttribute(input: string): string {

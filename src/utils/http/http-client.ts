@@ -1,4 +1,5 @@
 import { Logger } from "@zilla/logger";
+import { redactSensitiveText } from "@src/utils/security/redact.ts";
 
 const logger = new Logger("http-client");
 
@@ -107,13 +108,15 @@ export class HttpClient {
 
         const remainingAttempts = retries - attempt - 1;
         logger.warn(
-          `请求失败 (${lastError.name}): ${lastError.message} - 剩余重试次数: ${remainingAttempts}`,
+          `请求失败 (${lastError.name}): ${
+            redactSensitiveText(lastError.message)
+          } - 剩余重试次数: ${remainingAttempts}`,
           {
-            url,
+            url: redactSensitiveText(url),
             method: fetchOptions.method || "GET",
             attempt: attempt + 1,
             maxAttempts: retries,
-            error: lastError,
+            error: redactSensitiveText(lastError),
           },
         );
 
@@ -156,11 +159,11 @@ export class HttpClient {
       });
       return true;
     } catch (error) {
-      logger.error(`健康检查失败: ${url}`, {
+      logger.error(`健康检查失败: ${redactSensitiveText(url)}`, {
         error: error instanceof HttpError
-          ? error
-          : new HttpError((error as Error).message),
-        url,
+          ? redactSensitiveText(error)
+          : redactSensitiveText(new HttpError((error as Error).message)),
+        url: redactSensitiveText(url),
         timestamp: new Date().toISOString(),
       });
       return false;

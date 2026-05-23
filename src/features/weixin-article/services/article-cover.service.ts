@@ -9,16 +9,18 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { redactError } from "@src/utils/security/redact.ts";
 
 const logger = new Logger("weixin-article-cover-service");
 
 export interface ArticleCoverImageGeneratorResolver {
   getGenerator(
-    type: ImageGeneratorType.ALIWANX_POSTER,
+    type: ImageGeneratorType.ALIYUN_POSTER | ImageGeneratorType.MINIMAX_IMAGE,
   ): Promise<ImageGenerator<ArticleCoverImageRequest, string>>;
 }
 
 interface ArticleCoverImageRequest {
+  model?: string;
   title: string;
   sub_title?: string;
   prompt_text_zh?: string;
@@ -26,32 +28,59 @@ interface ArticleCoverImageRequest {
   generate_num: 1;
 }
 
+export interface CoverGenerationResult {
+  mediaId: string;
+  generated: boolean;
+  fallback: boolean;
+  generatorType: string;
+  model?: string;
+  imageUrl?: string;
+  error?: string;
+}
+
 export class WeixinArticleCoverService {
   constructor(
     private publisher: Pick<ContentPublisher, "uploadImage">,
     private imageGeneratorResolver: ArticleCoverImageGeneratorResolver,
     private readonly promptProfile?: PromptProfileName,
+    private readonly imageModel?: string,
+    private readonly imageGeneratorType:
+      | ImageGeneratorType.ALIYUN_POSTER
+      | ImageGeneratorType.MINIMAX_IMAGE = ImageGeneratorType.ALIYUN_POSTER,
   ) {}
 
   public async generateCoverMediaId(title: string): Promise<string> {
+    return (await this.generateCover(title)).mediaId;
+  }
+
+  public async generateCover(title: string): Promise<CoverGenerationResult> {
     try {
       return await this.generateAndUploadCover(title);
     } catch (error) {
+      const redacted = redactError(error);
       logger.warn(
-        `[封面生成] 动态封面生成失败，使用默认封面继续发布: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `[封面生成] 动态封面生成失败，使用默认封面继续发布: ${redacted.message}`,
       );
-      return await this.publisher.uploadImage("");
+      return {
+        mediaId: await this.publisher.uploadImage(""),
+        generated: false,
+        fallback: true,
+        generatorType: this.imageGeneratorType,
+        model: this.imageModel,
+        error: redacted.message,
+      };
     }
   }
 
-  private async generateAndUploadCover(title: string): Promise<string> {
+  private async generateAndUploadCover(
+    title: string,
+  ): Promise<CoverGenerationResult> {
     const imageGenerator = await this.imageGeneratorResolver
-      .getGenerator(ImageGeneratorType.ALIWANX_POSTER);
+      .getGenerator(this.imageGeneratorType);
     const coverTitle = getCoverTitle(title);
     const profile = resolvePromptProfile(this.promptProfile);
     const imageUrl = await imageGenerator.generate({
+      model: this.imageModel,
       title: coverTitle,
       sub_title: `${new Date().toLocaleDateString()} ${profile.label}`,
       prompt_text_zh: [
@@ -67,6 +96,13 @@ export class WeixinArticleCoverService {
       generate_num: 1,
     });
 
-    return await this.publisher.uploadImage(imageUrl);
+    return {
+      mediaId: await this.publisher.uploadImage(imageUrl),
+      generated: true,
+      fallback: false,
+      generatorType: this.imageGeneratorType,
+      model: this.imageModel,
+      imageUrl,
+    };
   }
 }

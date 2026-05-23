@@ -8,6 +8,7 @@ import { ImageGeneratorResolver } from "@src/integrations/image/image-generator-
 import { LlmProviderResolver } from "@src/integrations/llm/llm-provider-resolver.ts";
 import { EmbeddingProviderResolver } from "@src/integrations/vector/embedding-provider-resolver.ts";
 import { EmbeddingProviderType } from "@src/core/ports/embedding.ts";
+import { ImageGeneratorType } from "@src/core/ports/image-generator.ts";
 import { planArticleSources } from "@src/app/weixin-article/fetch/article-fetch-planner.ts";
 import { ArticleFetchRouter } from "@src/app/weixin-article/fetch/article-fetch-router.ts";
 import { createArticleNotifier } from "@src/app/weixin-article/notifications.ts";
@@ -35,12 +36,15 @@ import type {
 import { MemoryArtifactStore } from "@src/core/storage/memory-artifact-store.ts";
 import { MemoryRunStateStore } from "@src/core/storage/memory-run-state-store.ts";
 import type { VectorStore } from "@src/core/ports/vector-store.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export interface CreateWeixinArticleDependenciesOptions {
   artifactStore?: ArtifactStore;
   runStateStore?: RunStateStore;
   mode?: RuntimeMode;
   vectorStoreFactory?: () => Promise<VectorStore>;
+  profileId?: string;
+  runtimeConfigSnapshot?: JsonObject;
 }
 
 export async function createWeixinArticleDependencies(
@@ -73,6 +77,11 @@ export async function createWeixinArticleDependencies(
       imageCount: bodyImages.count,
       onlyWhenNoMedia: bodyImages.mode === "missing",
       imageSize: bodyImages.size,
+      imageModel: bodyImages.model,
+      imageGeneratorType: resolveImageGeneratorType(
+        bodyImages.provider,
+        "body",
+      ),
       promptProfile,
     },
   );
@@ -112,6 +121,11 @@ export async function createWeixinArticleDependencies(
       publisher,
       imageGeneratorResolver,
       promptProfile,
+      config.features.article.cover.model,
+      resolveImageGeneratorType(
+        config.features.article.cover.provider,
+        "cover",
+      ),
     ),
     renderService: new WeixinArticleRenderService(
       new WeixinArticleTemplateRenderer(
@@ -132,6 +146,8 @@ export async function createWeixinArticleDependencies(
     },
     config: {
       dryRun: config.features.article.dryRun,
+      profileId: options.profileId,
+      runtimeConfigSnapshot: options.runtimeConfigSnapshot,
     },
   };
 }
@@ -144,6 +160,37 @@ function createPublisher(
       return new WeixinPublisher(config.providers.publish.weixin);
     case "weixin-relay":
       return new WeixinRelayPublisher(config.providers.publish.weixinRelay);
+  }
+}
+
+function resolveImageGeneratorType(
+  provider: ResolvedTrendPublishConfig["features"]["article"]["cover"][
+    "provider"
+  ],
+  usage: "cover",
+): ImageGeneratorType.ALIYUN_POSTER | ImageGeneratorType.MINIMAX_IMAGE;
+function resolveImageGeneratorType(
+  provider: ResolvedTrendPublishConfig["features"]["article"]["bodyImages"][
+    "provider"
+  ],
+  usage: "body",
+): ImageGeneratorType.ALIYUN_IMAGE | ImageGeneratorType.MINIMAX_IMAGE;
+function resolveImageGeneratorType(
+  provider: ResolvedTrendPublishConfig["features"]["article"]["cover"][
+    "provider"
+  ],
+  usage: "cover" | "body",
+):
+  | ImageGeneratorType.ALIYUN_POSTER
+  | ImageGeneratorType.ALIYUN_IMAGE
+  | ImageGeneratorType.MINIMAX_IMAGE {
+  switch (provider) {
+    case "dashscope":
+      return usage === "cover"
+        ? ImageGeneratorType.ALIYUN_POSTER
+        : ImageGeneratorType.ALIYUN_IMAGE;
+    case "minimax":
+      return ImageGeneratorType.MINIMAX_IMAGE;
   }
 }
 

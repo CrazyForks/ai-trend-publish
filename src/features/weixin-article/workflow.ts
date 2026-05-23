@@ -12,6 +12,8 @@ import type { RankResult } from "@src/core/ports/content-ranker.ts";
 import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
 import type { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
 import type { WeixinArticleSourceLoadResult } from "@src/features/weixin-article/services/content-scrape.service.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
+import type { CoverGenerationResult } from "@src/features/weixin-article/services/article-cover.service.ts";
 
 const logger = new Logger("weixin-article-workflow");
 
@@ -28,10 +30,13 @@ interface WeixinWorkflowParams {
   dryRunOutputDir?: string;
   runId?: string;
   trigger?: "manual" | "cron";
+  profileId?: string;
 }
 
 export interface WeixinArticleWorkflowConfig {
   dryRun: boolean;
+  profileId?: string;
+  runtimeConfigSnapshot?: JsonObject;
 }
 
 interface StepResult<T> {
@@ -67,6 +72,22 @@ export class WeixinArticleWorkflow {
         `[工作流开始] 开始执行微信工作流, 当前工作流实例ID: ${this.env.id} 触发事件ID: ${event.id}, runId: ${runId}`,
       );
       this.dependencies.renderService.setUploadContentImages(!dryRun);
+
+      if (this.dependencies.config.runtimeConfigSnapshot) {
+        await this.runTrackedStep(
+          step,
+          runId,
+          "runtime-config-snapshot",
+          async () => {
+            const ref = await artifactStore.putJson(
+              artifactStore.createRunKey(runId, "00-runtime-config", "json"),
+              this.dependencies.config.runtimeConfigSnapshot,
+              { label: "运行时配置快照", contentType: "application/json" },
+            );
+            return { result: ref, artifacts: [ref] };
+          },
+        );
+      }
 
       await this.runTrackedStep(step, runId, "validate-ip-whitelist", {
         retries: { limit: 3, delay: "10 second", backoff: "exponential" },
@@ -276,23 +297,29 @@ export class WeixinArticleWorkflow {
           timeout: "5 minutes",
         },
         async () => {
-          const mediaId = dryRun
-            ? "dry-run-media-id"
-            : await this.dependencies.coverService.generateCoverMediaId(
+          const result: CoverGenerationResult = dryRun
+            ? {
+              mediaId: "dry-run-media-id",
+              generated: false,
+              fallback: false,
+              generatorType: "dry-run",
+            }
+            : await this.dependencies.coverService.generateCover(
               summaryTitle,
             );
           const ref = await artifactStore.putJson(
             artifactStore.createRunKey(runId, "08-cover", "json"),
-            { mediaId },
+            result,
             { label: "封面", contentType: "application/json" },
           );
           return { result: ref, artifacts: [ref] };
         },
         [titleRef],
       );
-      const mediaId = (await artifactStore.getJson<{ mediaId: string }>(
+      const coverResult = await artifactStore.getJson<CoverGenerationResult>(
         coverRef,
-      )).mediaId;
+      );
+      const mediaId = coverResult.mediaId;
 
       const renderedTemplateRef = await this.runTrackedStep(
         step,
@@ -388,6 +415,7 @@ export class WeixinArticleWorkflow {
         - 失败: ${this.dependencies.stats.failed} 个
         - 内容: ${this.dependencies.stats.contents} 条
         - 重复: ${this.dependencies.stats.duplicates} 条
+        - 封面: ${formatCoverSummary(coverResult)}
         - 发布: ${dryRun ? "DryRun(未发布)" : "成功"}`.trim();
 
       await runStateStore.finishRun(runId, {
@@ -494,4 +522,17 @@ export class WeixinArticleWorkflow {
     }
     return this.dependencies.config.dryRun;
   }
+}
+
+function formatCoverSummary(result: CoverGenerationResult): string {
+  if (result.generatorType === "dry-run") {
+    return "DryRun 跳过生成";
+  }
+  if (result.generated) {
+    return `已生成${result.model ? ` (${result.model})` : ""}`;
+  }
+  if (result.fallback) {
+    return `使用默认封面${result.error ? `，原因: ${result.error}` : ""}`;
+  }
+  return "未生成";
 }

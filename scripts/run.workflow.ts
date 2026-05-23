@@ -14,6 +14,7 @@ interface CliOptions {
   sourceType?: "all" | "firecrawl" | "twitter";
   dryRunOutputDir?: string;
   forcePublish?: boolean;
+  profileId?: string;
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -63,6 +64,13 @@ function parseArgs(args: string[]): CliOptions {
       case "--force-publish":
         options.forcePublish = true;
         break;
+      case "--profile":
+        if (!next) {
+          throw new Error("--profile 需要提供 Profile ID");
+        }
+        options.profileId = next;
+        index++;
+        break;
       case "--help":
         printHelp();
         Deno.exit(0);
@@ -90,6 +98,7 @@ function printHelp() {
   --dry-run-output <dir> dry-run HTML 输出目录
   --max-articles <n>     限制文章数量
   --source <type>        all、firecrawl 或 twitter
+  --profile <id>        指定 Dashboard 运行时配置 Profile
   --force-publish        传递强制发布标记
 `);
 }
@@ -116,6 +125,7 @@ try {
       maxArticles: options.maxArticles,
       sourceType: options.sourceType,
       forcePublish: options.forcePublish,
+      profileId: options.profileId,
     },
     id: runId,
     timestamp: Date.now(),

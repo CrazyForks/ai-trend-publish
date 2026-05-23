@@ -5,10 +5,14 @@ import {
   BaseAliyunImageGenerator,
 } from "@src/integrations/image/providers/aliyun/base-aliyun-image-generator.ts";
 
+export const ALIYUN_DEFAULT_POSTER_IMAGE_MODEL = "qwen-image-2.0-pro";
+export const ALIYUN_LEGACY_POSTER_IMAGE_MODEL = "wanx-poster-generation-v1";
+
 /**
  * 阿里云海报生成模型参数接口
  */
-export interface WanxPosterGenOptions {
+export interface AliyunPosterImageOptions {
+  model?: string;
   title: string; // 必选，主标题，最多30个字符
   sub_title?: string; // 可选，副标题，最多30个字符
   body_text?: string; // 可选，正文，最多50个字符
@@ -46,24 +50,36 @@ export interface WanxPosterGenOptions {
 /**
  * 阿里云海报生成器实现类
  */
-export class AliyunWanxPosterGenerator extends BaseAliyunImageGenerator<
-  WanxPosterGenOptions,
+export class AliyunPosterImageGenerator extends BaseAliyunImageGenerator<
+  AliyunPosterImageOptions,
   string
 > {
-  constructor(apiKey?: string) {
+  constructor(
+    apiKey?: string,
+    defaultModel = ALIYUN_DEFAULT_POSTER_IMAGE_MODEL,
+  ) {
     super(apiKey);
     this.baseUrl =
       "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
-    this.model = "wanx-poster-generation-v1";
+    this.model = defaultModel;
   }
 
-  async generate(options: WanxPosterGenOptions): Promise<string> {
+  async generate(options: AliyunPosterImageOptions): Promise<string> {
     // 参数验证
     this.validateOptions(options);
+    const model = options.model || this.model;
+
+    if (model !== ALIYUN_LEGACY_POSTER_IMAGE_MODEL) {
+      return await this.generateMultimodalImage(
+        model,
+        buildCoverPrompt(options),
+      );
+    }
 
     try {
       // 提交任务
       const taskResponse = await this.submitTask<AliTaskResponse>({
+        model,
         input: {
           title: options.title,
           sub_title: options.sub_title,
@@ -87,7 +103,7 @@ export class AliyunWanxPosterGenerator extends BaseAliyunImageGenerator<
 
       // 等待任务完成
       return await this.waitForCompletion(taskResponse.output.task_id);
-    } catch (error: any) {
+    } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new Error(
           `阿里云API调用失败: ${
@@ -106,7 +122,7 @@ export class AliyunWanxPosterGenerator extends BaseAliyunImageGenerator<
     throw new Error("任务成功但未获取到图片URL");
   }
 
-  private validateOptions(options: WanxPosterGenOptions): void {
+  private validateOptions(options: AliyunPosterImageOptions): void {
     if (!options.title) {
       throw new Error("标题是必需的");
     }
@@ -238,4 +254,15 @@ export class AliyunWanxPosterGenerator extends BaseAliyunImageGenerator<
       }
     }
   }
+}
+
+function buildCoverPrompt(options: AliyunPosterImageOptions): string {
+  return [
+    "为微信公众号文章生成一张专业封面图。",
+    `主标题：${options.title}`,
+    options.sub_title ? `副标题：${options.sub_title}` : "",
+    options.prompt_text_zh ? `画面要求：${options.prompt_text_zh}` : "",
+    options.prompt_text_en ? `English guidance: ${options.prompt_text_en}` : "",
+    "要求：中文标题清晰可读，版式适合公众号封面；不要二维码、水印、品牌 Logo、可识别人脸或多余小字。",
+  ].filter(Boolean).join("\n");
 }

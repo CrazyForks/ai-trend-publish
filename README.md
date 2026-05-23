@@ -26,10 +26,11 @@ TrendPublish 是一个基于 Deno 和 TypeScript
   兼容接口，用于排序、摘要、润色、标题和动态模板生成。
 - 微信文章渲染：内置多套公众号模板，支持 `dynamic` 动态模板和 `minimal`
   等静态模板。
-- 智能配图：支持阿里云百炼 / DashScope 通义万相生成封面图和可选正文配图。
+- 智能配图：支持阿里云图片生成和 MiniMax 图片生成，用于封面图和可选正文配图。
 - 服务覆盖：大模型、数据源获取、图片生成、发布、通知和存储都按能力拆分，
   现在能直接使用，后续也方便继续补充。
 - 发布与调试：支持微信公众号草稿/发布接口，也支持 dry-run 输出本地 HTML。
+- 日志观测：所有 Logger 输出都可镜像到结构化 stdout 或 HTTP 日志平台。
 - 可选增强：支持本地 SQLite / Cloudflare D1 向量去重，以及
   Bark、钉钉、飞书工作流通知。
 
@@ -117,20 +118,25 @@ deno task preview
 # 跑一次微信文章流程，不上传、不发布
 deno task article --dry-run
 
-# 启动服务和定时任务
+# 启动本地 API 服务 + Dashboard 前端热更新
 deno task dev
 ```
+
+`deno task dev` 会同时启动后端服务 `http://localhost:8000` 和 Vite Dashboard
+`http://localhost:5173/dashboard/`，前端修改会自动刷新并代理 `/api` 到本地后端。
 
 `article --dry-run` 会把渲染后的 HTML 输出到
 `src/temp/`，适合正式发布前检查正文效果。
 
 ## 配置原则
 
-TrendPublish 的配置分成两层：
+TrendPublish 的配置分成三层：
 
 - `providers`：只放外部服务凭证和默认能力参数。
 - `features.article`：决定微信文章工作流开启哪些功能、选择哪个
   provider、使用什么参数。
+- `storage.runtimeConfig`：保存 Dashboard 可编辑的运行时业务配置。本地/Docker 用
+  SQLite，Cloudflare 用 D1；密钥不会写入数据库。
 
 例如，开启正文 AI 配图时：
 
@@ -162,10 +168,12 @@ features: {
 | 选择提示词风格 | `features.article.renderer.promptProfile` | 支持 `technology`、`business`、`product`、`developer`、`research`、`general` |
 | 配置数据源     | `features.article.sources`                | 直接写 URL，也可以用 `group:url` 指定抓取分组                                |
 | 配置抓取策略   | `fetchGroups`                             | 分组内 provider 按顺序 fallback                                              |
-| 开启封面生图   | `features.article.cover`                  | 需要 `providers.image.dashscope.apiKey`                                      |
+| 开启封面生图   | `features.article.cover`                  | 支持 `dashscope` / `minimax`，需要对应 `providers.image.*.apiKey`            |
 | 开启正文配图   | `features.article.bodyImages`             | 失败时回退已有原文图片布局                                                   |
 | 开启向量去重   | `features.article.deduplication`          | 需要 embedding provider；本地/Docker 用 SQLite，Cloudflare 用 D1             |
 | 开启通知       | `features.article.notifications.channels` | 支持 Bark、钉钉、飞书                                                        |
+| 页面改配置     | `storage.runtimeConfig`                   | Dashboard 保存 Profile、数据源、抓取分组和定时规则，下一次运行生效           |
+| 接入日志观测   | `observability`                           | 所有 `Logger` 输出可镜像到 stdout、Axiom、Better Stack 或 HTTP ingest        |
 | 正式发布微信   | `features.article.dryRun: false`          | 本地固定 IP 用 `weixin`，Cloudflare 推荐 `weixin-relay`                      |
 
 完整字段说明见 [配置说明](docs/configuration.md)。
@@ -247,11 +255,14 @@ features: {
 
 ### 图片生成
 
-- 阿里云百炼 / DashScope
-  通义万相：[申请地址](https://bailian.console.aliyun.com/)； 配置
+- 阿里云图片生成：[申请地址](https://bailian.console.aliyun.com/)；配置
   `providers.image.dashscope.apiKey`。
-- 封面图默认模型：`wanx-poster-generation-v1`。
-- 正文配图通过 `features.article.bodyImages` 开启，可设置生成数量和尺寸。
+- MiniMax 图片生成：[申请地址](https://platform.minimax.io/)；配置
+  `providers.image.minimax.apiKey`，当前默认模型为 `image-01`。
+- 阿里云封面图默认模型：`qwen-image-2.0-pro`，更适合中文标题和封面版式。
+- 阿里云正文配图默认模型：`qwen-image-2.0`，也可手动配置 `wan2.7-image-pro`
+  或兼容旧模型 `wanx2.1-t2i-turbo`。
+- 正文配图通过 `features.article.bodyImages` 开启，可设置生成模型、数量和尺寸。
 - 后续：OpenAI Images、Gemini / Imagen、Replicate、Stability、ComfyUI。
 
 ### 发布与素材
@@ -300,7 +311,7 @@ deno task preview
 deno task verify
 deno task test
 
-# 本地服务
+# 本地前端/文档开发
 deno task dashboard
 deno task docs
 
@@ -309,6 +320,9 @@ deno task docker
 deno task relay
 deno task cf deploy
 ```
+
+`deno task dashboard` 只启动 Dashboard 前端 dev server；日常开发推荐直接用
+`deno task dev`，它会同时启动后端和前端 watch。
 
 ## 项目结构
 
