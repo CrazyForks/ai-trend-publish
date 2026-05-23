@@ -5,6 +5,7 @@
   "compatibility_date": "2026-05-21",
   "compatibility_flags": ["nodejs_compat"],
   "alias": {
+    "@src/": "./src/",
     "@zilla/logger": "./src/platform/cloudflare/shims/logger.ts",
     "@zilla/logger-upstream": "./src/platform/cloudflare/shims/logger-upstream.ts",
     "jsr:@deno-library/progress": "./src/platform/cloudflare/shims/progress.ts",
