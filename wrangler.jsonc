@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "alias": {
     "@zilla/logger": "./src/platform/cloudflare/shims/logger.ts",
+    "@zilla/logger-upstream": "./src/platform/cloudflare/shims/logger-upstream.ts",
     "jsr:@deno-library/progress": "./src/platform/cloudflare/shims/progress.ts",
     "npm:axios": "axios",
     "npm:axios@1.8.3": "axios",
