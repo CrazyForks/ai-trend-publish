@@ -41,27 +41,27 @@ export function clearLoggerObservers(): void {
 }
 
 export class Logger extends UpstreamLogger {
-  static get level(): LogLevel {
+  static override get level(): LogLevel {
     return UpstreamLogger.level;
   }
 
-  static set level(value: LogLevel) {
+  static override set level(value: LogLevel) {
     UpstreamLogger.level = value;
   }
 
-  static get levelOperator(): LogLevelOperator {
+  static override get levelOperator(): LogLevelOperator {
     return UpstreamLogger.levelOperator;
   }
 
-  static set levelOperator(value: LogLevelOperator) {
+  static override set levelOperator(value: LogLevelOperator) {
     UpstreamLogger.levelOperator = value;
   }
 
-  static get alignmentCategories(): string[] | undefined {
+  static override get alignmentCategories(): string[] | undefined {
     return UpstreamLogger.alignmentCategories;
   }
 
-  static set alignmentCategories(value: string[] | undefined) {
+  static override set alignmentCategories(value: string[] | undefined) {
     UpstreamLogger.alignmentCategories = value;
   }
 
