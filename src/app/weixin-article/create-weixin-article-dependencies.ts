@@ -9,9 +9,17 @@ import { LlmProviderResolver } from "@src/integrations/llm/llm-provider-resolver
 import { EmbeddingProviderResolver } from "@src/integrations/vector/embedding-provider-resolver.ts";
 import { EmbeddingProviderType } from "@src/core/ports/embedding.ts";
 import { ImageGeneratorType } from "@src/core/ports/image-generator.ts";
-import { planArticleSources } from "@src/app/weixin-article/fetch/article-fetch-planner.ts";
+import {
+  planArticleSources,
+  resolveSourceProviders,
+} from "@src/app/weixin-article/fetch/article-fetch-planner.ts";
 import { ArticleFetchRouter } from "@src/app/weixin-article/fetch/article-fetch-router.ts";
 import { createArticleNotifier } from "@src/app/weixin-article/notifications.ts";
+import {
+  FetchProviderId,
+  fetchProviderRegistry,
+  isSearchFetchProvider,
+} from "@src/integrations/fetch/fetch-provider-registry.ts";
 import type {
   WeixinArticleDependencies,
   WeixinArticlePublisher,
@@ -27,6 +35,12 @@ import { WeixinArticleCoverService } from "@src/features/weixin-article/services
 import { WeixinArticleDryRunOutputService } from "@src/features/weixin-article/services/dry-run-output.service.ts";
 import { WeixinArticleRenderService } from "@src/features/weixin-article/services/article-render.service.ts";
 import { WeixinArticleTitleService } from "@src/features/weixin-article/services/article-title.service.ts";
+import { WeixinArticleEditorialTopicService } from "@src/features/weixin-article/services/editorial-topic.service.ts";
+import { WeixinArticleEditorialDecisionService } from "@src/features/weixin-article/services/editorial-decision.service.ts";
+import { WeixinArticlePlanService } from "@src/features/weixin-article/services/article-plan.service.ts";
+import { WeixinArticleResearchService } from "@src/features/weixin-article/services/article-research.service.ts";
+import { WeixinArticleQualityReviewService } from "@src/features/weixin-article/services/quality-review.service.ts";
+import { WeixinArticleRevisionService } from "@src/features/weixin-article/services/article-revision.service.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
 import type {
@@ -37,12 +51,17 @@ import { MemoryArtifactStore } from "@src/core/storage/memory-artifact-store.ts"
 import { MemoryRunStateStore } from "@src/core/storage/memory-run-state-store.ts";
 import type { VectorStore } from "@src/core/ports/vector-store.ts";
 import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
+import {
+  type EditorialMemoryStore,
+  NoopEditorialMemoryStore,
+} from "@src/core/ports/editorial-memory-store.ts";
 
 export interface CreateWeixinArticleDependenciesOptions {
   artifactStore?: ArtifactStore;
   runStateStore?: RunStateStore;
   mode?: RuntimeMode;
   vectorStoreFactory?: () => Promise<VectorStore>;
+  editorialMemoryStore?: EditorialMemoryStore;
   profileId?: string;
   runtimeConfigSnapshot?: JsonObject;
 }
@@ -69,6 +88,10 @@ export async function createWeixinArticleDependencies(
   const promptProfile = renderer.promptProfile;
   const artifactStore = options.artifactStore ?? new MemoryArtifactStore();
   const runStateStore = options.runStateStore ?? new MemoryRunStateStore();
+  const editorialMemoryStore = options.editorialMemoryStore ??
+    new NoopEditorialMemoryStore();
+  const articleFetchRouter = new ArticleFetchRouter(config);
+  const researchSearchProviders = resolveResearchSearchProviders(config);
   const imageLayoutService = new AiArticleImageLayoutService(
     new WeixinArticleImageLayoutService(),
     imageGeneratorResolver,
@@ -93,7 +116,8 @@ export async function createWeixinArticleDependencies(
       planArticleSources(config),
       notifier,
       stats,
-      new ArticleFetchRouter(config),
+      articleFetchRouter,
+      config.features.article.sourceLimits,
     ),
     dedupService: new WeixinArticleContentDedupService(
       stats,
@@ -115,6 +139,7 @@ export async function createWeixinArticleDependencies(
       new AISummarizer(llmProvider, promptProfile),
       notifier,
       config.features.article.count,
+      articleFetchRouter,
     ),
     titleService: new WeixinArticleTitleService(),
     coverService: new WeixinArticleCoverService(
@@ -138,18 +163,63 @@ export async function createWeixinArticleDependencies(
     ),
     dryRunOutputService: new WeixinArticleDryRunOutputService(artifactStore),
     contentRanker: new ContentRanker(llmProvider, promptProfile),
+    editorialTopicService: new WeixinArticleEditorialTopicService(
+      llmProvider,
+      promptProfile,
+    ),
+    editorialDecisionService: new WeixinArticleEditorialDecisionService(
+      llmProvider,
+      promptProfile,
+    ),
+    articlePlanService: new WeixinArticlePlanService(
+      llmProvider,
+      promptProfile,
+    ),
+    researchService: new WeixinArticleResearchService(
+      articleFetchRouter,
+      {
+        enabled: researchSearchProviders.length > 0,
+        maxResearchQueries: 3,
+        maxResultsPerQuery: 3,
+        searchProviders: researchSearchProviders,
+      },
+    ),
+    qualityReviewService: new WeixinArticleQualityReviewService(
+      llmProvider,
+      promptProfile,
+    ),
+    revisionService: new WeixinArticleRevisionService(
+      llmProvider,
+      promptProfile,
+    ),
     stats,
     runtime: {
       artifactStore,
       runStateStore,
+      editorialMemoryStore,
       mode: options.mode ?? "local",
     },
     config: {
       dryRun: config.features.article.dryRun,
       profileId: options.profileId,
       runtimeConfigSnapshot: options.runtimeConfigSnapshot,
+      qualityGate: config.features.article.qualityGate,
     },
   };
+}
+
+function resolveResearchSearchProviders(
+  config: ResolvedTrendPublishConfig,
+): FetchProviderId[] {
+  const providers = resolveSourceProviders(
+    "article quality research",
+    config.fetchGroups.search ?? ["auto"],
+    "query",
+  ).filter(isSearchFetchProvider);
+
+  return providers.filter((provider) =>
+    fetchProviderRegistry.get(provider).isConfigured(config)
+  ) as FetchProviderId[];
 }
 
 function createPublisher(

@@ -55,11 +55,72 @@ Deno.test("ArticleFetchRouter returns all failures when every provider fails", a
   ]);
 });
 
+Deno.test("ArticleFetchRouter hydrates article detail with richer content", async () => {
+  const calls: string[] = [];
+  const router = new ArticleFetchRouter(
+    new Map([
+      [
+        "jina",
+        mockScraper("jina", calls, [{
+          title: "完整标题",
+          content: "完整正文".repeat(140),
+        }]),
+      ],
+    ]),
+  );
+
+  const result = await router.hydrate({
+    id: "a1",
+    title: "短标题",
+    content: "短摘要",
+    url: "https://example.com/article",
+    publishDate: new Date(0).toISOString(),
+    metadata: {},
+  });
+
+  assertEquals(result.hydrated, true);
+  assertEquals(result.provider, "jina");
+  assertEquals(result.content.id, "a1");
+  assertEquals(result.content.title, "完整标题");
+  assertEquals(result.content.metadata.hydrated, true);
+  assertEquals(calls, ["jina"]);
+});
+
+Deno.test("ArticleFetchRouter keeps original article when hydration is not richer", async () => {
+  const calls: string[] = [];
+  const router = new ArticleFetchRouter(
+    new Map([
+      [
+        "jina",
+        mockScraper("jina", calls, [{
+          title: "短内容",
+          content: "还是短",
+        }]),
+      ],
+    ]),
+  );
+
+  const result = await router.hydrate({
+    id: "a1",
+    title: "短标题",
+    content: "短摘要",
+    url: "https://example.com/article",
+    publishDate: new Date(0).toISOString(),
+    metadata: {},
+  });
+
+  assertEquals(result.hydrated, false);
+  assertEquals(result.content.title, "短标题");
+  assertEquals(result.failures[0].provider, "jina");
+  assertEquals(calls, ["jina"]);
+});
+
 function source(providers: ArticleSource["providers"]): ArticleSource {
   return {
     raw: "web:https://example.com/",
     group: "web",
     url: "https://example.com/",
+    kind: "url",
     providers,
   };
 }
@@ -79,7 +140,7 @@ function mockScraper(
       return contents.map((item, index) => ({
         id: `${name}_${index}`,
         title: String(item.title),
-        content: String(item.title),
+        content: String(item.content ?? item.title),
         url: "https://example.com/",
         publishDate: new Date(0).toISOString(),
         metadata: {},

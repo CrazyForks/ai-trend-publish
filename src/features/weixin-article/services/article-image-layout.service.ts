@@ -136,11 +136,17 @@ export class WeixinArticleImageLayoutService
 }
 
 export class AiArticleImageLayoutService implements ArticleImageLayoutService {
+  private generatedImageEnabled = true;
+
   constructor(
     private fallbackLayoutService = new WeixinArticleImageLayoutService(),
     private imageGeneratorResolver: AiImageGeneratorResolver,
     private config: AiImageLayoutConfig = DEFAULT_AI_IMAGE_LAYOUT_CONFIG,
   ) {}
+
+  setGeneratedImageEnabled(enabled: boolean): void {
+    this.generatedImageEnabled = enabled;
+  }
 
   async layoutArticles(articles: WeixinTemplate[]): Promise<WeixinTemplate[]> {
     if (!await this.isEnabled()) {
@@ -215,7 +221,7 @@ export class AiArticleImageLayoutService implements ArticleImageLayoutService {
   }
 
   private async isEnabled(): Promise<boolean> {
-    return this.config.enabled;
+    return this.generatedImageEnabled && this.config.enabled;
   }
 
   private async getImageCount(): Promise<number> {

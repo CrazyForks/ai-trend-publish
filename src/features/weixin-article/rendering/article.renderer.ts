@@ -8,12 +8,16 @@ import { BaseTemplateRenderer } from "@src/features/weixin-article/rendering/bas
 import { Logger } from "@zilla/logger";
 import type { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
 import { WEIXIN_TEMPLATE_REGISTRY } from "@src/features/weixin-article/rendering/template-registry.ts";
+import type { WeixinArticleRenderContext } from "@src/features/weixin-article/services/article-render.service.ts";
 
 const DYNAMIC_TEMPLATE = "__dynamic__";
 const logger = new Logger("weixin-article-template-renderer");
 
 export interface DynamicHtmlGenerator {
-  generate(articles: WeixinTemplate[]): Promise<string>;
+  generate(
+    articles: WeixinTemplate[],
+    context?: WeixinArticleRenderContext,
+  ): Promise<string>;
 }
 
 /**
@@ -47,6 +51,33 @@ export class WeixinArticleTemplateRenderer
     this.uploadContentImages = enabled;
   }
 
+  public setGenerateContentImages(enabled: boolean): void {
+    this.imageLayoutService.setGeneratedImageEnabled?.(enabled);
+  }
+
+  public override render(
+    data: WeixinTemplate[],
+    templateType?: string,
+    context?: WeixinArticleRenderContext,
+  ): Promise<string>;
+  public override render(
+    data: WeixinTemplate[],
+    context?: WeixinArticleRenderContext,
+  ): Promise<string>;
+  public override render(
+    data: WeixinTemplate[],
+    templateTypeOrContext?: string | WeixinArticleRenderContext,
+    maybeContext?: WeixinArticleRenderContext,
+  ): Promise<string> {
+    const templateType = typeof templateTypeOrContext === "string"
+      ? templateTypeOrContext
+      : undefined;
+    const context = typeof templateTypeOrContext === "string"
+      ? maybeContext
+      : templateTypeOrContext;
+    return super.render(data, templateType, context);
+  }
+
   /**
    * 加载文章模板文件
    */
@@ -63,6 +94,7 @@ export class WeixinArticleTemplateRenderer
   public async doRender(
     data: WeixinTemplate[],
     template: string,
+    context?: WeixinArticleRenderContext,
   ): Promise<string> {
     console.log(
       `WeixinArticleTemplateRenderer doRender: ${data.length} articles`,
@@ -75,7 +107,7 @@ export class WeixinArticleTemplateRenderer
         if (!this.dynamicHtmlGenerator) {
           throw new Error("动态微信模板需要注入 DynamicHtmlGenerator");
         }
-        html = await this.dynamicHtmlGenerator.generate(processedData);
+        html = await this.dynamicHtmlGenerator.generate(processedData, context);
       } catch (error) {
         logger.warn(
           `动态微信模板生成失败，回退 minimal: ${

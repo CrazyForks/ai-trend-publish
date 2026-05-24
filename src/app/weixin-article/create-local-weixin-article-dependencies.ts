@@ -4,6 +4,7 @@ import {
 } from "@src/app/weixin-article/create-weixin-article-dependencies.ts";
 import { LocalArtifactStore } from "@src/platform/local/local-artifact-store.ts";
 import { LocalJsonRunStateStore } from "@src/platform/local/local-json-run-state-store.ts";
+import { SQLiteEditorialMemoryStore } from "@src/platform/local/sqlite-editorial-memory-store.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { join } from "node:path";
 
@@ -25,6 +26,8 @@ export async function createLocalWeixinArticleDependencies(
     ...options,
     artifactStore: new LocalArtifactStore(baseDir),
     runStateStore: new LocalJsonRunStateStore(baseDir),
+    editorialMemoryStore: options.editorialMemoryStore ??
+      new SQLiteEditorialMemoryStore(config.storage.runtimeConfig.sqlitePath),
     mode: "local",
     vectorStoreFactory: options.vectorStoreFactory ?? (async () => {
       const { SQLiteVectorStore } = await import(

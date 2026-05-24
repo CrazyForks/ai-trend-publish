@@ -18,6 +18,7 @@ export default defineConfig({
       { text: "快速开始", link: "/getting-started" },
       { text: "配置", link: "/configuration" },
       { text: "架构", link: "/architecture" },
+      { text: "编辑自动化", link: "/editorial-automation" },
       { text: "部署", link: "/deployment" },
       { text: "帮助", link: "/help" },
       { text: "模板", link: "/templates" },
@@ -30,6 +31,7 @@ export default defineConfig({
           { text: "快速开始", link: "/getting-started" },
           { text: "配置说明", link: "/configuration" },
           { text: "架构总览", link: "/architecture" },
+          { text: "Editorial Automation 计划", link: "/editorial-automation" },
           { text: "部署与发布", link: "/deployment" },
           { text: "帮助文档", link: "/help" },
         ],
@@ -45,6 +47,10 @@ export default defineConfig({
           {
             text: "Jina AI 集成指南",
             link: "/integrations/jina-integration-guide",
+          },
+          {
+            text: "数据获取 API",
+            link: "/integrations/data-fetching-apis",
           },
         ],
       },

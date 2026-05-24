@@ -57,7 +57,7 @@ Deno.test("WeixinDynamicHtmlGenerator rejects invalid JSON", async () => {
   await assertRejects(
     () => generator.generate(articles),
     Error,
-    "解析动态 HTML JSON 失败",
+    "JSON 对象",
   );
 });
 

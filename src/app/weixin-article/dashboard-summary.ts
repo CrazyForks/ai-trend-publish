@@ -33,6 +33,13 @@ export interface DashboardConfigSummary {
     notifications: {
       channels: string[];
     };
+    qualityGate: {
+      enabled: boolean;
+      minScore: number;
+      blockOnHighFactIssue: boolean;
+      allowForcePublish: boolean;
+      maxRevisionRounds: number;
+    };
   };
   storage: {
     artifacts: string;
@@ -86,6 +93,13 @@ export function createDashboardConfigSummary(
       notifications: {
         channels: article.notifications.channels,
       },
+      qualityGate: {
+        enabled: article.qualityGate.enabled,
+        minScore: article.qualityGate.minScore,
+        blockOnHighFactIssue: article.qualityGate.blockOnHighFactIssue,
+        allowForcePublish: article.qualityGate.allowForcePublish,
+        maxRevisionRounds: article.qualityGate.maxRevisionRounds,
+      },
     },
     storage: {
       artifacts: config.storage.artifacts.provider,
@@ -98,6 +112,15 @@ export function createDashboardConfigSummary(
       ai: Boolean(config.providers.ai.apiKey),
       firecrawl: Boolean(config.providers.fetch.firecrawl.apiKey),
       jina: Boolean(config.providers.fetch.jina.apiKey),
+      jinaSearch: Boolean(config.providers.fetch.jina.apiKey),
+      braveSearch: Boolean(config.providers.fetch.brave.apiKey),
+      tavilySearch: Boolean(config.providers.fetch.tavily.apiKey),
+      exaSearch: Boolean(config.providers.fetch.exa.apiKey),
+      serperSearch: Boolean(config.providers.fetch.serper.apiKey),
+      newsapi: Boolean(config.providers.fetch.newsapi.apiKey),
+      gdelt: true,
+      hackernews: true,
+      arxiv: true,
       twitter: Boolean(
         config.providers.fetch.twitter.bearerToken ||
           config.providers.fetch.twitter.xquikApiKey,

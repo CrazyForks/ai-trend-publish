@@ -12,12 +12,19 @@ import { WeixinArticleDryRunOutputService } from "@src/features/weixin-article/s
 import { WeixinArticleRenderService } from "@src/features/weixin-article/services/article-render.service.ts";
 import { WeixinArticleTitleService } from "@src/features/weixin-article/services/article-title.service.ts";
 import { WeixinArticleWorkflowStats } from "@src/features/weixin-article/services/workflow-stats.ts";
+import { WeixinArticleEditorialTopicService } from "@src/features/weixin-article/services/editorial-topic.service.ts";
+import { WeixinArticleEditorialDecisionService } from "@src/features/weixin-article/services/editorial-decision.service.ts";
+import { WeixinArticlePlanService } from "@src/features/weixin-article/services/article-plan.service.ts";
+import { WeixinArticleQualityReviewService } from "@src/features/weixin-article/services/quality-review.service.ts";
+import { WeixinArticleRevisionService } from "@src/features/weixin-article/services/article-revision.service.ts";
+import { WeixinArticleResearchService } from "@src/features/weixin-article/services/article-research.service.ts";
 import type { WeixinArticleWorkflowConfig } from "@src/features/weixin-article/workflow.ts";
 import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
 import type {
   RunStateStore,
   RuntimeMode,
 } from "@src/core/ports/run-state-store.ts";
+import type { EditorialMemoryStore } from "@src/core/ports/editorial-memory-store.ts";
 
 export interface WeixinArticlePublisher
   extends ContentPublisher, ContentImageUploader {
@@ -27,6 +34,7 @@ export interface WeixinArticlePublisher
 export interface WeixinArticleRuntimeDependencies {
   artifactStore: ArtifactStore;
   runStateStore: RunStateStore;
+  editorialMemoryStore: EditorialMemoryStore;
   mode: RuntimeMode;
 }
 
@@ -41,6 +49,12 @@ export interface WeixinArticleDependencies {
   renderService: WeixinArticleRenderService;
   dryRunOutputService: WeixinArticleDryRunOutputService;
   contentRanker: ContentRanker;
+  editorialTopicService: WeixinArticleEditorialTopicService;
+  editorialDecisionService: WeixinArticleEditorialDecisionService;
+  articlePlanService: WeixinArticlePlanService;
+  researchService: WeixinArticleResearchService;
+  qualityReviewService: WeixinArticleQualityReviewService;
+  revisionService: WeixinArticleRevisionService;
   stats: WeixinArticleWorkflowStats;
   runtime: WeixinArticleRuntimeDependencies;
   config: WeixinArticleWorkflowConfig;

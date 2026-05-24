@@ -26,6 +26,7 @@ export interface PublishResult {
   status: PublishStatus;
   publishedAt: Date;
   platform: string;
+  reason?: string;
 }
 
 export type PublishStatus =
@@ -33,4 +34,5 @@ export type PublishStatus =
   | "published"
   | "failed"
   | "draft"
-  | "scheduled";
+  | "scheduled"
+  | "blocked";

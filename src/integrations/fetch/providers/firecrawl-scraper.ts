@@ -24,10 +24,20 @@ const StoriesSchema = zod.object({
 
 type StoriesExtract = zod.infer<typeof StoriesSchema>;
 
+const ArticleSchema = zod.object({
+  article: zod.object({
+    title: zod.string(),
+    content: zod.string(),
+    date_posted: zod.string().optional(),
+  }),
+});
+
+type ArticleExtract = zod.infer<typeof ArticleSchema>;
+
 interface FirecrawlScrapeResult {
   success?: boolean;
   error?: string;
-  extract?: StoriesExtract;
+  extract?: unknown;
 }
 
 interface FirecrawlScrapeClient {
@@ -69,12 +79,17 @@ export class FireCrawlScraper implements ContentScraper {
 
   async scrape(
     sourceId: string,
-    _options?: ScraperOptions,
+    options?: ScraperOptions,
   ): Promise<ScrapedContent[]> {
     try {
       await this.refresh();
       const startTime = Date.now();
       const currentDate = new Date().toLocaleDateString();
+      const scrape = this.getScrapeClient();
+
+      if (isArticleDetailMode(options)) {
+        return await this.scrapeArticleDetail(sourceId, scrape, startTime);
+      }
 
       // 构建提取提示词
       const promptForFirecrawl = `
@@ -101,14 +116,6 @@ export class FireCrawlScraper implements ContentScraper {
       !!
       `;
 
-      const firecrawlClient = this.app as FirecrawlScrapeClient;
-      const scrape = firecrawlClient.scrape?.bind(firecrawlClient) ??
-        firecrawlClient.scrapeUrl?.bind(firecrawlClient);
-
-      if (!scrape) {
-        throw new Error("Firecrawl SDK 未提供 scrape 方法");
-      }
-
       // 使用 FirecrawlApp 进行抓取
       const scrapeResult = await scrape(sourceId, {
         formats: ["extract"],
@@ -118,7 +125,7 @@ export class FireCrawlScraper implements ContentScraper {
         },
       });
 
-      if (scrapeResult.success === false || !scrapeResult.extract?.stories) {
+      if (scrapeResult.success === false || !scrapeResult.extract) {
         throw new Error(scrapeResult.error || "未获取到有效内容");
       }
 
@@ -149,4 +156,96 @@ export class FireCrawlScraper implements ContentScraper {
       throw error;
     }
   }
+
+  private async scrapeArticleDetail(
+    sourceId: string,
+    scrape: (
+      url: string,
+      params: Record<string, unknown>,
+    ) => Promise<FirecrawlScrapeResult>,
+    startTime: number,
+  ): Promise<ScrapedContent[]> {
+    const promptForArticleDetail = `
+      Extract the main article from this exact URL, not a list of related stories.
+      Return only pure JSON in this format:
+      {
+        "article": {
+          "title": "article title",
+          "content": "detailed article body",
+          "date_posted": "YYYY-MM-DD HH:mm:ss"
+        }
+      }
+
+      Rules:
+      - Keep only facts present in the source page. Do not invent facts.
+      - Preserve product names, dates, numbers, model names, quotes, and limitations.
+      - Remove navigation, cookie banners, ads, recommendations, and footer text.
+      - Translate the article body into Chinese, but keep key English product names.
+      - If the source page has enough information, content should be detailed and useful for writing an analysis article, preferably 1200+ Chinese characters.
+      - If the page has no readable article body, return an empty content string.
+      The source URL is ${sourceId}.
+    `;
+
+    const scrapeResult = await scrape(sourceId, {
+      formats: ["extract"],
+      extract: {
+        prompt: promptForArticleDetail,
+        schema: ArticleSchema,
+      },
+    });
+
+    if (scrapeResult.success === false || !scrapeResult.extract) {
+      throw new Error(scrapeResult.error || "未获取到详情页内容");
+    }
+
+    const validatedData: ArticleExtract = ArticleSchema.parse(
+      scrapeResult.extract,
+    );
+    const article = validatedData.article;
+    const content = article.content.trim();
+    if (!content) {
+      throw new Error("详情页未提取到正文");
+    }
+
+    logger.debug(
+      `[FireCrawl] 从 ${sourceId} 深抓正文 ${content.length} 字符 耗时: ${
+        Date.now() - startTime
+      }ms`,
+    );
+
+    return [{
+      id: this.generateId(sourceId),
+      title: article.title,
+      content,
+      url: sourceId,
+      publishDate: article.date_posted
+        ? formatDate(article.date_posted)
+        : new Date().toISOString(),
+      metadata: {
+        source: "fireCrawl",
+        originalUrl: sourceId,
+        detail: true,
+        datePosted: article.date_posted,
+      },
+    }];
+  }
+
+  private getScrapeClient(): (
+    url: string,
+    params: Record<string, unknown>,
+  ) => Promise<FirecrawlScrapeResult> {
+    const firecrawlClient = this.app as FirecrawlScrapeClient;
+    const scrape = firecrawlClient.scrape?.bind(firecrawlClient) ??
+      firecrawlClient.scrapeUrl?.bind(firecrawlClient);
+
+    if (!scrape) {
+      throw new Error("Firecrawl SDK 未提供 scrape 方法");
+    }
+
+    return scrape;
+  }
+}
+
+function isArticleDetailMode(options?: ScraperOptions): boolean {
+  return options?.filters?.mode === "article-detail";
 }

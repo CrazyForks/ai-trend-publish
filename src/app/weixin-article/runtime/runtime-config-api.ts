@@ -260,6 +260,7 @@ export function createProviderStatus(config: ResolvedTrendPublishConfig) {
     fetch: {
       firecrawl: Boolean(config.providers.fetch.firecrawl.apiKey),
       jina: Boolean(config.providers.fetch.jina.apiKey),
+      jinaSearch: Boolean(config.providers.fetch.jina.apiKey),
       twitter: Boolean(
         config.providers.fetch.twitter.bearerToken ||
           config.providers.fetch.twitter.xquikApiKey,
@@ -523,6 +524,42 @@ async function validateArticlePatch(
     );
   }
 
+  const sourceLimits = objectValue(patch.sourceLimits);
+  if (sourceLimits) {
+    validateNumberRange(
+      sourceLimits.maxAgeDays,
+      "article.sourceLimits.maxAgeDays",
+      1,
+      365,
+      issues,
+    );
+    validateNumberRange(
+      sourceLimits.maxItemsPerSource,
+      "article.sourceLimits.maxItemsPerSource",
+      1,
+      200,
+      issues,
+    );
+  }
+
+  const qualityGate = objectValue(patch.qualityGate);
+  if (qualityGate) {
+    validateNumberRange(
+      qualityGate.minScore,
+      "article.qualityGate.minScore",
+      0,
+      100,
+      issues,
+    );
+    validateNumberRange(
+      qualityGate.maxRevisionRounds,
+      "article.qualityGate.maxRevisionRounds",
+      0,
+      2,
+      issues,
+    );
+  }
+
   const notifications = objectValue(patch.notifications);
   if (notifications) {
     await validateCapabilityReference(
@@ -710,9 +747,21 @@ function validateStringEnum(
   }
 }
 
+function validateNumberRange(
+  value: JsonValue | undefined,
+  path: string,
+  min: number,
+  max: number,
+  issues: ValidationIssue[],
+): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || value < min || value > max) {
+    issues.push({ path, message: `必须是 ${min}-${max} 之间的数字` });
+  }
+}
+
 function isFetchProviderName(value: unknown): value is FetchProviderName {
-  return value === "auto" || value === "firecrawl" || value === "jina" ||
-    value === "twitter" || value === "rss";
+  return typeof value === "string" && FETCH_PROVIDER_NAMES.has(value);
 }
 
 function isHttpUrl(value: string): boolean {
@@ -754,13 +803,27 @@ function normalizeFetchGroupsInput(
   for (const [name, providers] of Object.entries(value)) {
     if (!Array.isArray(providers)) continue;
     result[name] = providers
-      .filter((item): item is FetchProviderName =>
-        item === "auto" || item === "firecrawl" || item === "jina" ||
-        item === "twitter" || item === "rss"
-      );
+      .filter(isFetchProviderName);
   }
   return result;
 }
+
+const FETCH_PROVIDER_NAMES = new Set<string>([
+  "auto",
+  "firecrawl",
+  "jina",
+  "jina-search",
+  "brave-search",
+  "tavily-search",
+  "exa-search",
+  "serper-search",
+  "newsapi",
+  "gdelt",
+  "hackernews",
+  "arxiv",
+  "twitter",
+  "rss",
+]);
 
 async function requestJson<T>(request: Request): Promise<T> {
   return await request.json().catch(() => ({})) as T;

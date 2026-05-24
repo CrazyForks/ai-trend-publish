@@ -6,6 +6,7 @@
 - [配置说明](/configuration)
 - [部署与发布](/deployment)
 - [JSON-RPC API](/api/json-rpc-api)
+- [数据获取 API](/integrations/data-fetching-apis)
 - [钉钉 Webhook 配置指南](/integrations/dingtalk-webhook-guide)
 - [Jina AI 集成指南](/integrations/jina-integration-guide)
 
@@ -38,10 +39,13 @@
 
 ### 抓取结果质量不稳定
 
-1. 给 `providers.fetch.jina.apiKey` 与 `providers.fetch.firecrawl.apiKey`
-   配置可用 key。
-2. 调整数据源质量，避免低质量站点。
-3. 使用更适合长文本分析的 `providers.ai.model`。
+1. 普通网页建议配置 `providers.fetch.firecrawl.apiKey` 或
+   `providers.fetch.jina.apiKey`。
+2. 关键词搜索可以先用无需 key 的 `gdelt`、`hackernews`、`arxiv`，再按需加入
+   `brave-search`、`jina-search`、`tavily-search`、`exa-search` 或
+   `serper-search`。
+3. 调整数据源质量，避免低质量站点。
+4. 使用更适合长文本分析的 `providers.ai.model`。
 
 ### 微信发布失败
 

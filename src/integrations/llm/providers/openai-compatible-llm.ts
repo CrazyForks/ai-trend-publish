@@ -17,6 +17,8 @@ export class OpenAICompatibleLLM implements LLMProvider {
   private token!: string;
   private defaultModel!: string;
   private availableModels: string[] = [];
+  private timeoutMs = 300000;
+  private maxAttempts = 1;
   private httpClient: HttpClient;
 
   constructor(
@@ -37,6 +39,8 @@ export class OpenAICompatibleLLM implements LLMProvider {
     }
     this.baseURL = config.baseUrl;
     this.token = config.apiKey;
+    this.timeoutMs = normalizeTimeoutMs(config.timeoutMs);
+    this.maxAttempts = normalizeMaxAttempts(config.maxAttempts);
 
     // 获取模型配置，支持多模型格式 "model1|model2|model3"
     const modelConfig = config.model || "gpt-3.5-turbo";
@@ -109,8 +113,8 @@ export class OpenAICompatibleLLM implements LLMProvider {
             stream: options.stream ?? false,
             response_format: options.response_format,
           }),
-          timeout: 60000, // 60秒超时
-          retries: 3, // 最多重试3次
+          timeout: this.timeoutMs,
+          retries: this.maxAttempts,
           retryDelay: 1000, // 重试间隔1秒
         },
       );
@@ -126,4 +130,20 @@ export class OpenAICompatibleLLM implements LLMProvider {
       });
     }
   }
+}
+
+function normalizeTimeoutMs(value?: number): number {
+  const timeout = Number(value);
+  if (!Number.isFinite(timeout)) {
+    return 300000;
+  }
+  return Math.max(30000, Math.min(Math.floor(timeout), 600000));
+}
+
+function normalizeMaxAttempts(value?: number): number {
+  const attempts = Number(value);
+  if (!Number.isFinite(attempts)) {
+    return 1;
+  }
+  return Math.max(1, Math.min(Math.floor(attempts), 5));
 }

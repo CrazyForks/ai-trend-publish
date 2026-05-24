@@ -6,6 +6,7 @@
     "verify": "deno run -A scripts/task-runner.ts verify",
     "test": "deno run -A scripts/task-runner.ts test",
     "article": "deno run -A scripts/task-runner.ts article",
+    "experiment": "deno run -A scripts/task-runner.ts experiment",
     "preview": "deno run -A scripts/task-runner.ts preview",
     "relay": "deno run -A scripts/task-runner.ts relay",
     "weixin:relay": "deno task relay",
@@ -24,6 +25,7 @@
     "@zilla/logger-upstream": "jsr:@zilla/logger@^1.0.1",
     "@sapling/markdown": "jsr:@sapling/markdown@^0.3.0",
     "@cliffy/command": "jsr:@cliffy/command@1.1.0",
+    "jsonrepair": "npm:jsonrepair@3",
     "vitepress": "npm:vitepress@1.6.4",
     "vue": "npm:vue@3.5.34"
   },

@@ -1,8 +1,10 @@
 export type ArticleFetchProvider = string;
+export type ArticleSourceKind = "url" | "query";
 
 export interface ArticleSource {
   raw: string;
   url: string;
+  kind: ArticleSourceKind;
   group: string;
   providers: ArticleFetchProvider[];
 }
@@ -11,6 +13,7 @@ export interface ParsedArticleSource {
   raw: string;
   group: string;
   url: string;
+  kind: ArticleSourceKind;
 }
 
 export function parseArticleSources(
@@ -25,7 +28,10 @@ export function parseArticleSources(
 
   for (const raw of sources) {
     const parsed = parseSourceInput(raw);
-    const normalizedKey = `${parsed.group}:${new URL(parsed.url).href}`;
+    const normalizedValue = parsed.kind === "url"
+      ? new URL(parsed.url).href
+      : normalizeQuery(parsed.url);
+    const normalizedKey = `${parsed.group}:${parsed.kind}:${normalizedValue}`;
     if (seen.has(normalizedKey)) {
       continue;
     }
@@ -33,7 +39,8 @@ export function parseArticleSources(
     parsedSources.push({
       raw: parsed.raw,
       group: parsed.group,
-      url: new URL(parsed.url).href,
+      url: normalizedValue,
+      kind: parsed.kind,
     });
   }
 
@@ -51,7 +58,7 @@ export function parseSourceInput(rawSource: string): ParsedArticleSource {
   }
 
   if (isHttpUrl(raw)) {
-    return { raw, group: "default", url: raw };
+    return { raw, group: "default", url: raw, kind: "url" };
   }
 
   const separatorIndex = raw.indexOf(":");
@@ -64,11 +71,19 @@ export function parseSourceInput(rawSource: string): ParsedArticleSource {
   if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(group)) {
     throw new Error(`数据源分组名无效: ${group}`);
   }
+
+  if (isHttpUrl(url)) {
+    return { raw, group, url, kind: "url" };
+  }
+
+  const query = parseQuerySource(group, url);
+  if (query) {
+    return { raw, group, url: query, kind: "query" };
+  }
+
   if (!isHttpUrl(url)) {
     throw new Error(`数据源 URL 无效: ${raw}`);
   }
-
-  return { raw, group, url };
 }
 
 function isHttpUrl(value: string): boolean {
@@ -78,4 +93,23 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function parseQuerySource(group: string, value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("query:")) {
+    return normalizeQuery(trimmed.slice("query:".length));
+  }
+  if (group === "search" || group === "jina-search") {
+    return normalizeQuery(trimmed);
+  }
+  return undefined;
+}
+
+function normalizeQuery(value: string): string {
+  const query = value.replace(/\s+/g, " ").trim();
+  if (!query) {
+    throw new Error("搜索关键词不能为空");
+  }
+  return query;
 }

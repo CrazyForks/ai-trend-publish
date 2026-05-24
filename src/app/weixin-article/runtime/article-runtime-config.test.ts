@@ -1,6 +1,9 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SQLiteRuntimeConfigStore } from "@src/platform/local/sqlite-runtime-config-store.ts";
-import { resolveTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import {
+  resolveTrendPublishConfig,
+  type TrendPublishConfig,
+} from "@src/utils/config/define-config.ts";
 import {
   DEFAULT_BODY_IMAGE_CAPABILITY_ID,
   DEFAULT_COVER_IMAGE_CAPABILITY_ID,
@@ -30,7 +33,68 @@ Deno.test("runtime config seeds article profile and shared capabilities", async 
     "web:https://example.com",
   ]);
   assertEquals(detail.fetchGroups.web, ["firecrawl", "jina"]);
+  assertEquals(detail.article.sourceLimits, {
+    maxAgeDays: 14,
+    maxItemsPerSource: 20,
+  });
   assertEquals(detail.schedule?.cron, "0 3 * * *");
+});
+
+Deno.test("runtime config merges TS config sources and fetch groups into existing profiles", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+
+  const nextConfig = resolveTrendPublishConfig({
+    ...createConfigSource(),
+    fetchGroups: {
+      default: ["auto"],
+      web: ["firecrawl"],
+      search: ["jina-search"],
+    },
+    features: {
+      article: {
+        ...createConfigSource().features?.article,
+        sources: [
+          "web:https://example.com",
+          "search:AI agent news",
+        ],
+      },
+    },
+  });
+
+  const detail = await getArticleRuntimeProfileDetail(store, nextConfig);
+  const resolved = await resolveArticleRuntimeConfig(
+    store,
+    nextConfig,
+    detail.profile.id,
+  );
+
+  assertEquals(detail.fetchGroups.web, ["firecrawl", "jina"]);
+  assertEquals(detail.fetchGroups.search, ["jina-search"]);
+  assertEquals(detail.sources.map((item) => item.raw), [
+    "web:https://example.com",
+    "search:AI agent news",
+  ]);
+  assertEquals(resolved.config.features.article.sources, [
+    "web:https://example.com",
+    "search:AI agent news",
+  ]);
+});
+
+Deno.test("runtime config appends new TS fetch fallbacks to existing runtime groups", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+  await store.replaceArticleFetchGroups(detail.profile.id, {
+    default: ["auto"],
+    web: ["firecrawl"],
+  });
+
+  const refreshed = await getArticleRuntimeProfileDetail(store, config);
+  assertEquals(refreshed.fetchGroups.web, ["firecrawl", "jina"]);
 });
 
 Deno.test("runtime config resolves capability references and feature overrides", async () => {
@@ -51,6 +115,7 @@ Deno.test("runtime config resolves capability references and feature overrides",
   await saveArticleProfileConfig(store, config, detail.profile.id, {
     bodyImages: {
       mode: "all",
+      imageProfileId: DEFAULT_BODY_IMAGE_CAPABILITY_ID,
       overrides: {
         count: 2,
       },
@@ -338,7 +403,7 @@ function createConfig() {
   return resolveTrendPublishConfig(createConfigSource());
 }
 
-function createConfigSource() {
+function createConfigSource(): TrendPublishConfig {
   return {
     providers: {
       ai: {
@@ -381,5 +446,5 @@ function createConfigSource() {
         },
       },
     },
-  } as const;
+  };
 }

@@ -1,5 +1,6 @@
 import { ScrapedContent } from "@src/core/ports/content-scraper.ts";
 import {
+  getChineseNewsroomStyleGuide,
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
@@ -8,11 +9,14 @@ export function getSystemPrompt(
   promptProfile?: PromptProfileName,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
+  const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
   return `你是面向中文公众号的资深选题编辑，负责从候选内容中挑出最值得写成“${profile.label}”的文章。
 
 目标读者：${profile.audience}。
 
 编辑口径：${profile.editorialTone}。
+
+${newsroomStyle}
 
 你的判断目标不是“看起来相关”，而是判断它是否值得读者花时间了解：是否有明确新信息、可验证价值、实际影响或可操作启发。
 
@@ -21,7 +25,7 @@ export function getSystemPrompt(
 1. 新信息密度与时效性（25 分）
 - 是否是近期发布、更新、融资、研究、政策、产品或开源动态
 - 标题和正文是否提供具体新事实，而不是泛泛评论或旧闻复述
-- 是否能回答“今天为什么要看它”
+- 是否能回答“今天为什么要看它”，有没有足够强的新闻钩子
 
 2. 影响范围与行业信号（25 分）
 - 是否会影响开发者、产品团队、企业采购、创作者或普通用户
@@ -40,6 +44,7 @@ export function getSystemPrompt(
 
 5. 表达素材价值（10 分）
 - 是否有可用于成文的明确观点、冲突、对比、图片或案例
+- 是否能写出有读者欲望的第一段，而不是只能写成模板化摘要
 - 有图片/演示/截图可以略微加分，但不要机械加 10 分
 
 内容类型偏好：

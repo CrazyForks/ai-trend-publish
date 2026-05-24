@@ -27,16 +27,17 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
     label: "AI 科技趋势",
     audience:
       "关注 AI 产品、模型、开源、工程实践和科技商业动态的开发者、产品经理、创业者和内容创作者",
-    editorialTone: "专业、克制、具体，有科技媒体判断力，避免廉价 AI 感和营销腔",
+    editorialTone:
+      "像中文科技媒体编辑：开头有新闻钩子，信息具体，节奏轻快但不油滑，有判断但不喊口号",
     selectionFocus: [
       "模型能力、AI 产品、开发者工具、开源生态、算力基础设施、监管和商业模式的新变化",
       "能回答“今天为什么要看它”的新事实、新工具或新信号",
       "对开发者、产品团队、企业采购、创作者或普通用户有实际影响的内容",
     ],
     contentAngles: [
-      "新能力：具体模型、工具或平台能力发生了什么变化",
-      "落地价值：它会改变哪些开发、产品、创作或企业使用场景",
-      "后续信号：值得继续观察的生态、成本、竞争或监管变化",
+      "新鲜点：这次真正新增了什么能力、动作、数字或限制",
+      "读者关系：它会影响哪些开发、产品、创作、采购或普通使用场景",
+      "行业信号：这件事背后反映了生态、成本、竞争或监管的什么变化",
     ],
     preferredTopics: [
       "模型和多模态能力更新",
@@ -51,9 +52,9 @@ const PROMPT_PROFILES: Record<PromptProfileName, PromptProfile> = {
       "重复转载、旧闻复述和低信息密度聚合",
     ],
     titleGuidance:
-      "优先使用具体公司/产品/模型/项目名和明确动作，避免“AI新趋势”“科技快报”等抽象标题。",
+      "标题要像真实科技媒体标题：具体对象 + 新动作/反差/结果，优先保留公司、产品、模型和数字，避免“AI新趋势”“科技快报”“今日速递”等抽象模板。",
     layoutGuidance:
-      "像中文科技媒体：紧凑、清晰、有重点块，但不要满屏蓝紫渐变或通篇卡片。",
+      "像中文科技媒体长图文：短段推进、先抛信息钩子，再讲细节和影响；重点块服务判断，不要通篇卡片和 AI 感装饰。",
     imageGuidance:
       "科技媒体配图，可使用抽象界面、芯片、数据流、开发工具、实验室桌面或产品工作流。",
     coverGuidance: "AI 行业趋势、产品更新、开发者工具和科技商业观察。",
@@ -244,4 +245,34 @@ export function resolvePromptProfile(
 
 export function listPromptProfileNames(): PromptProfileName[] {
   return Object.keys(PROMPT_PROFILES) as PromptProfileName[];
+}
+
+export function getChineseNewsroomStyleGuide(
+  profile?: PromptProfileName,
+): string {
+  const resolved = resolvePromptProfile(profile);
+  const commonRules = [
+    "开头第一段必须回答“这事为什么现在值得看”，不要用欢迎语、总述腔或背景铺垫开场。",
+    "优先写具体主体、动作、结果、数字、限制和影响对象，少写抽象趋势判断。",
+    "段落要短，每段只推进一个信息点；允许有口语节奏，但不能标题党、阴阳怪气或营销腔。",
+    "避免 AI 常见句式：值得关注的是、总体来看、这意味着、未来有望、赋能、重塑、引领、开启新篇章。",
+    "小标题要像编辑判断，不要只写“背景”“影响”“总结”这类目录词。",
+    "结尾不写空泛展望，优先留下一个具体观察点、限制或后续变量。",
+  ];
+
+  if (resolved.id === "technology") {
+    return [
+      "中文科技媒体写作指南：",
+      ...commonRules,
+      "科技稿要把模型、产品、公司、开源项目、论文或平台动作写清楚，避免只堆“AI 行业”“智能化”等泛词。",
+      "如果是多条资讯，先选一个最有读者价值的主线；如果没有主线，就写成“精选短评”，不要硬凑成宏大趋势。",
+      "判断要落在读者身上：开发者能不能用、产品会怎么变、企业成本是否变化、普通用户会不会感知到。",
+    ].join("\n- ");
+  }
+
+  return [
+    `中文媒体写作指南（适用于${resolved.label}）：`,
+    ...commonRules,
+    "不同题材按题材写：产品写使用场景，商业写利益和信号，研究写方法与边界，教程写路径和限制。",
+  ].join("\n- ");
 }

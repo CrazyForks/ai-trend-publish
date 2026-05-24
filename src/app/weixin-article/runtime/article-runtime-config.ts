@@ -56,6 +56,17 @@ export interface ArticleFeatureProfileConfig {
     embeddingProfileId: string;
     vectorStore: ArticleVectorStoreProvider;
   };
+  sourceLimits: {
+    maxAgeDays: number;
+    maxItemsPerSource: number;
+  };
+  qualityGate: {
+    enabled: boolean;
+    minScore: number;
+    blockOnHighFactIssue: boolean;
+    allowForcePublish: boolean;
+    maxRevisionRounds: number;
+  };
   notifications: {
     profileId?: string;
   };

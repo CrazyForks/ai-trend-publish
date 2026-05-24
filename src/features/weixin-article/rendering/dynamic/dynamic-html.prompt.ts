@@ -1,5 +1,7 @@
 import { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
+import type { ArticlePlan } from "@src/features/weixin-article/domain/article-plan.ts";
 import {
+  getChineseNewsroomStyleGuide,
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
@@ -8,6 +10,7 @@ export function getDynamicHtmlSystemPrompt(
   promptProfile?: PromptProfileName,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
+  const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
   return `你是中文公众号的资深排版编辑。你需要根据文章内容生成适合微信公众号编辑器粘贴的 HTML。
 
 目标读者：
@@ -15,8 +18,10 @@ export function getDynamicHtmlSystemPrompt(
 
 当前内容定位：${profile.label}。
 
+${newsroomStyle}
+
 编辑原则：
-1. 先让读者快速抓住本期最重要的信息，再展开细节。
+1. 先让读者快速抓住本期最重要的信息：第一屏必须有新闻钩子，不要只写栏目名。
 2. 版式要服务内容，不要把每篇文章套成完全相同的卡片。
 3. 风格要求：${profile.editorialTone}。
 4. 不新增事实，不改写原文观点，不编造来源、数据、作者或链接。
@@ -44,8 +49,8 @@ ${profile.contentAngles.map((item) => `   - ${item}`).join("\n")}
    - 工程/开源：问题场景 + 技术亮点 + 适合谁用
    - 商业/公司：事件 + 背后信号 + 后续影响
 2. 每篇文章的内部结构可以不同，但全篇视觉系统要统一。
-3. 开头可以使用“本期看点”或“编辑观察”，但不要写空泛欢迎语。
-4. 自动识别 1-3 个核心观点，用轻量 callout 强调；callout 应短而有信息量。
+3. 开头可以使用一句编辑判断或新闻钩子，但不要写空泛欢迎语，也不要固定写“本期看点”。
+4. 自动识别 1-3 个核心观点，用轻量 callout 强调；callout 必须短、具体、有信息量，不能写成“值得关注”。
 5. 列表不要使用 ul/ol/li，使用 section + p 模拟列表。
 6. 多图内容可生成 gallery 风格 section，但仍使用普通 img 标签。
 7. 控制装饰密度：单篇文章最多一个重点块，整体最多 3 个重点块。
@@ -60,21 +65,30 @@ ${profile.contentAngles.map((item) => `   - ${item}`).join("\n")}
 export function getDynamicHtmlUserPrompt(
   articles: WeixinTemplate[],
   promptProfile?: PromptProfileName,
+  articlePlan?: ArticlePlan,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
+  const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
   const compactArticles = articles.map((article, index) => ({
     index: index + 1,
     title: article.title,
     publishDate: article.publishDate,
     url: article.url,
     keywords: article.keywords || [],
-    content: article.content,
+    content: compactText(article.content, 1800),
     media: (article.media || []).map((media) => ({
       url: media.url,
       type: media.type,
       size: media.size,
     })),
   }));
+
+  const planBlock = articlePlan
+    ? `
+文章计划（优先遵循）：
+${JSON.stringify(compactArticlePlan(articlePlan), null, 2)}
+`
+    : "";
 
   return `请根据以下文章列表生成一整篇微信公众号 HTML。
 
@@ -84,15 +98,53 @@ export function getDynamicHtmlUserPrompt(
 成文角度：
 ${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
 
+${newsroomStyle}
+
 需要包含：
-1. 一个有信息量的开篇标题区：不要只写“AI 快报”，要体现本期核心主题。
-2. 一个可快速浏览的目录或本期看点区。
+1. 一个有信息量的开篇标题区：不要只写“AI 快报”，要体现本期核心主题或最强新闻钩子。
+2. 一个可快速浏览的导读区；如果素材少，可以用两三句编辑导语替代目录。
 3. 每篇文章的标题、日期、正文和来源提示。
 4. 根据内容添加少量重点提示块，但不要过度装饰。
 5. 保留已有图片位置和原始图片 src。
 6. 文章之间要有节奏差异，避免每篇都是同样的“标题 + 摘要 + callout”。
 7. 如果文章数量少，排版应更像精选短评；如果文章数量多，排版应更像紧凑日报。
+8. 如果提供了文章计划，必须优先遵循其中的主线观点、章节结构、标题方向、风险边界和配图意图。
+9. 生成的中文要像编辑写稿，不要像模型汇总：少用“此外/同时/值得注意的是/总体来看”连续转场。
+
+${planBlock}
 
 文章数据：
 ${JSON.stringify(compactArticles, null, 2)}`;
+}
+
+function compactArticlePlan(plan: ArticlePlan) {
+  return {
+    format: plan.format,
+    thesis: plan.thesis,
+    targetReader: plan.targetReader,
+    summary: plan.summary,
+    sections: plan.sections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      intent: section.intent,
+      angle: section.angle,
+      articleIds: section.articleIds,
+      keyPoints: section.keyPoints,
+    })),
+    titleDirections: plan.titleDirections,
+    coverDirection: plan.coverDirection,
+    bodyImagePlan: plan.bodyImagePlan,
+    riskNotes: plan.riskNotes,
+  };
+}
+
+function compactText(value: string, maxLength: number): string {
+  const normalized = value
+    .replace(/<next_paragraph\s*\/>/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength).trim()}...`;
 }

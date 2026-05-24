@@ -2,19 +2,31 @@ import { WorkflowType } from "@src/controllers/cron.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
 import {
+  getAppConfig,
   initializeAppConfig,
   parseConfigArgs,
   shutdownAppResources,
   validateAppConfig,
 } from "@src/utils/config/app-config.ts";
+import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
+import { resolveArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import { planArticleSources } from "@src/app/weixin-article/fetch/article-fetch-planner.ts";
+import { ArticleFetchRouter } from "@src/app/weixin-article/fetch/article-fetch-router.ts";
+import {
+  type ArticleSourceFilter,
+  WeixinArticleContentScrapeService,
+} from "@src/features/weixin-article/services/content-scrape.service.ts";
+import type { INotifier } from "@src/core/ports/notifier.ts";
+import { join } from "node:path";
 
 interface CliOptions {
   dryRun: boolean;
   maxArticles?: number;
-  sourceType?: "all" | "firecrawl" | "twitter";
+  sourceType?: ArticleSourceFilter;
   dryRunOutputDir?: string;
   forcePublish?: boolean;
   profileId?: string;
+  sourcesOnly?: boolean;
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -53,10 +65,12 @@ function parseArgs(args: string[]): CliOptions {
         index++;
         break;
       case "--source":
-        if (
-          next !== "all" && next !== "firecrawl" && next !== "twitter"
-        ) {
-          throw new Error("--source 必须是 all、firecrawl 或 twitter");
+        if (!isArticleSourceFilter(next)) {
+          throw new Error(
+            `--source 必须是以下值之一: ${
+              Array.from(ARTICLE_SOURCE_FILTERS).join("、")
+            }`,
+          );
         }
         options.sourceType = next;
         index++;
@@ -70,6 +84,9 @@ function parseArgs(args: string[]): CliOptions {
         }
         options.profileId = next;
         index++;
+        break;
+      case "--sources-only":
+        options.sourcesOnly = true;
         break;
       case "--help":
         printHelp();
@@ -97,39 +114,123 @@ function printHelp() {
   --dry-run              跑完整流程但不上传封面/正文图，也不发布
   --dry-run-output <dir> dry-run HTML 输出目录
   --max-articles <n>     限制文章数量
-  --source <type>        all、firecrawl 或 twitter
+  --source <type>        限制抓取 provider，例如 all、firecrawl、jina、jina-search、hackernews
   --profile <id>        指定 Dashboard 运行时配置 Profile
+  --sources-only        只测试数据源抓取和截断，不进入 LLM/生成/发布链路
   --force-publish        传递强制发布标记
 `);
 }
+
+function isArticleSourceFilter(value: unknown): value is ArticleSourceFilter {
+  return typeof value === "string" &&
+    ARTICLE_SOURCE_FILTERS.has(value as ArticleSourceFilter);
+}
+
+const ARTICLE_SOURCE_FILTERS = new Set<ArticleSourceFilter>([
+  "all",
+  "firecrawl",
+  "jina",
+  "jina-search",
+  "brave-search",
+  "tavily-search",
+  "exa-search",
+  "serper-search",
+  "newsapi",
+  "gdelt",
+  "hackernews",
+  "arxiv",
+  "twitter",
+  "rss",
+]);
 
 const parsedConfigArgs = parseConfigArgs(Deno.args);
 const options = parseArgs(parsedConfigArgs.args);
 try {
   await initializeAppConfig({ configPath: parsedConfigArgs.configPath });
   await validateAppConfig({
-    requireLLM: true,
-    requireWeixinPublish: !options.dryRun,
+    requireLLM: !options.sourcesOnly,
+    requireWeixinPublish: !options.dryRun && !options.sourcesOnly,
   });
 
-  const runtime = new LocalWorkflowRuntime();
-  const runId = options.dryRun
-    ? `manual-dry-run-${crypto.randomUUID()}`
-    : `manual-run-${crypto.randomUUID()}`;
-  await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
-    payload: {
-      runId,
-      trigger: "manual",
-      dryRun: options.dryRun,
-      dryRunOutputDir: options.dryRunOutputDir,
-      maxArticles: options.maxArticles,
-      sourceType: options.sourceType,
-      forcePublish: options.forcePublish,
-      profileId: options.profileId,
-    },
-    id: runId,
-    timestamp: Date.now(),
-  });
+  if (options.sourcesOnly) {
+    await runSourceTest(options);
+  } else {
+    const runtime = new LocalWorkflowRuntime();
+    const runId = options.dryRun
+      ? `manual-dry-run-${crypto.randomUUID()}`
+      : `manual-run-${crypto.randomUUID()}`;
+    await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
+      payload: {
+        runId,
+        trigger: "manual",
+        dryRun: options.dryRun,
+        dryRunOutputDir: options.dryRunOutputDir,
+        maxArticles: options.maxArticles,
+        sourceType: options.sourceType,
+        forcePublish: options.forcePublish,
+        profileId: options.profileId,
+      },
+      id: runId,
+      timestamp: Date.now(),
+    });
+  }
 } finally {
   await shutdownAppResources();
+}
+
+async function runSourceTest(options: CliOptions): Promise<void> {
+  const baseConfig = await getAppConfig();
+  const stores = createLocalArticleRuntimeStores(baseConfig);
+  const runtimeConfig = await resolveArticleRuntimeConfig(
+    stores.runtimeConfigStore,
+    baseConfig,
+    options.profileId,
+  );
+  const config = runtimeConfig.config;
+  const stats = { success: 0, failed: 0, contents: 0, duplicates: 0 };
+  const scrapeService = new WeixinArticleContentScrapeService(
+    planArticleSources(config),
+    noopNotifier(),
+    stats,
+    new ArticleFetchRouter(config),
+    config.features.article.sourceLimits,
+  );
+  const sources = await scrapeService.loadSources(options.sourceType);
+  const result = await scrapeService.scrapeAllDetailed(sources);
+  const outputRoot = options.dryRunOutputDir ??
+    config.storage.artifacts.outputDir ??
+    "src/temp";
+  const outputDir = join(Deno.cwd(), outputRoot, "source-tests");
+  const outputPath = join(
+    outputDir,
+    `source-health-${new Date().toISOString().replaceAll(":", "-")}.json`,
+  );
+  await Deno.mkdir(outputDir, { recursive: true });
+  await Deno.writeTextFile(
+    outputPath,
+    JSON.stringify(result.health, null, 2),
+  );
+
+  console.log(`数据源测试完成:
+  - 数据源: ${result.health.totalSources}
+  - 成功: ${result.health.succeeded}
+  - 失败: ${result.health.failed}
+  - 空结果: ${result.health.empty}
+  - 保留内容: ${result.health.totalArticles}
+  - 结果文件: ${outputPath}`);
+
+  if (result.health.totalArticles === 0) {
+    throw new Error("数据源测试未获取到任何可用内容");
+  }
+}
+
+function noopNotifier(): INotifier {
+  return {
+    refresh: () => Promise.resolve(),
+    info: () => Promise.resolve(true),
+    success: () => Promise.resolve(true),
+    warning: () => Promise.resolve(true),
+    error: () => Promise.resolve(true),
+    notify: () => Promise.resolve(true),
+  };
 }

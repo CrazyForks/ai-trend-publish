@@ -235,7 +235,46 @@ async function handleRunsRequest(req: Request, pathname: string) {
     return jsonResponse({ run });
   }
 
+  const feedbackMatch = pathname.match(/^\/api\/runs\/([^/]+)\/feedback$/);
+  if (feedbackMatch) {
+    const runId = decodeURIComponent(feedbackMatch[1]);
+    if (req.method === "GET") {
+      const feedback = await stores.editorialMemoryStore.getFeedback(runId);
+      return jsonResponse({ feedback });
+    }
+    if (req.method === "PUT") {
+      const payload = await req.json().catch(() => ({})) as {
+        rating?: string;
+        note?: string;
+        profileId?: string;
+      };
+      const rating = normalizeFeedbackRating(payload.rating);
+      if (!rating) {
+        return jsonResponse({ error: "rating 必须是 good / ok / bad" }, 400);
+      }
+      const feedback = await stores.editorialMemoryStore.saveFeedback({
+        runId,
+        profileId: typeof payload.profileId === "string"
+          ? payload.profileId
+          : undefined,
+        rating,
+        note: typeof payload.note === "string" ? payload.note : undefined,
+      });
+      return jsonResponse({ feedback });
+    }
+    if (req.method === "DELETE") {
+      const deleted = await stores.editorialMemoryStore.deleteFeedback(runId);
+      return jsonResponse({ deleted });
+    }
+  }
+
   return jsonResponse({ error: "无效的 runs API" }, 404);
+}
+
+function normalizeFeedbackRating(
+  value: string | undefined,
+): "good" | "ok" | "bad" | null {
+  return value === "good" || value === "ok" || value === "bad" ? value : null;
 }
 
 async function handleArtifactRequest(req: Request): Promise<Response> {

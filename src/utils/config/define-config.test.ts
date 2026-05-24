@@ -12,6 +12,8 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
         baseUrl: "https://example.com/v1",
         apiKey: "llm-key",
         model: "model",
+        timeoutMs: 240000,
+        maxAttempts: 3,
       },
       fetch: {
         firecrawl: { apiKey: "firecrawl-key" },
@@ -68,6 +70,17 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
           embeddingProvider: "dashscope",
           vectorStore: "sqlite",
         },
+        sourceLimits: {
+          maxAgeDays: 7,
+          maxItemsPerSource: 12,
+        },
+        qualityGate: {
+          enabled: true,
+          minScore: 85,
+          blockOnHighFactIssue: true,
+          allowForcePublish: false,
+          maxRevisionRounds: 2,
+        },
       },
     },
     storage: {
@@ -80,6 +93,8 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
 
   assertEquals(config.server.apiKey, "server-key");
   assertEquals(config.providers.ai.model, "model");
+  assertEquals(config.providers.ai.timeoutMs, 240000);
+  assertEquals(config.providers.ai.maxAttempts, 3);
   assertEquals(config.features.article.publisher.provider, "weixin");
   assertEquals(config.features.article.renderer.template, "dynamic");
   assertEquals(config.features.article.renderer.promptProfile, "business");
@@ -100,6 +115,12 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
     "dashscope",
   );
   assertEquals(config.features.article.deduplication.vectorStore, "sqlite");
+  assertEquals(config.features.article.sourceLimits.maxAgeDays, 7);
+  assertEquals(config.features.article.sourceLimits.maxItemsPerSource, 12);
+  assertEquals(config.features.article.qualityGate.enabled, true);
+  assertEquals(config.features.article.qualityGate.minScore, 85);
+  assertEquals(config.features.article.qualityGate.allowForcePublish, false);
+  assertEquals(config.features.article.qualityGate.maxRevisionRounds, 2);
   assertEquals(config.storage.vector.provider, "sqlite");
   assertEquals(config.storage.vector.sqlitePath, "src/temp/test.sqlite3");
   assertEquals(config.features.article.notifications.channels, [
@@ -120,6 +141,13 @@ Deno.test("resolveTrendPublishConfig uses feature defaults without provider enab
   assertEquals(config.features.article.renderer.promptProfile, "technology");
   assertEquals(config.features.article.deduplication.enabled, false);
   assertEquals(config.features.article.deduplication.vectorStore, "sqlite");
+  assertEquals(config.features.article.qualityGate.enabled, true);
+  assertEquals(config.features.article.qualityGate.minScore, 80);
+  assertEquals(config.features.article.qualityGate.blockOnHighFactIssue, true);
+  assertEquals(config.features.article.qualityGate.allowForcePublish, true);
+  assertEquals(config.features.article.qualityGate.maxRevisionRounds, 1);
+  assertEquals(config.features.article.sourceLimits.maxAgeDays, 14);
+  assertEquals(config.features.article.sourceLimits.maxItemsPerSource, 20);
   assertEquals(config.features.article.notifications.channels, []);
   assertEquals(config.providers.vector.embedding.model, "");
   assertEquals(config.providers.notify.bark.url, "");

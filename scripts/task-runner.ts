@@ -6,6 +6,7 @@ const CHECK_FILES = [
   "src/index.ts",
   "src/apps/weixin-relay/server.ts",
   "scripts/run.workflow.ts",
+  "src/experiments/article-quality/run.ts",
   "scripts/preview.weixin.ts",
   "scripts/doctor.ts",
   "scripts/cloudflare-smoke.ts",
@@ -23,9 +24,11 @@ const TEST_FILES = [
   "src/core/logger/logger.test.ts",
   "src/core/storage/runtime-stores.test.ts",
   "src/core/observability/observability.test.ts",
+  "src/platform/local/sqlite-editorial-memory-store.test.ts",
   "src/integrations/vector/sqlite-vector-store.test.ts",
   "src/integrations/publish/providers/weixin-api-client.test.ts",
   "src/integrations/image/providers/minimax/minimax-image-generator.test.ts",
+  "src/integrations/fetch/providers/jina/jina-search-scraper.test.ts",
   "src/utils/image/safe-image-downloader.test.ts",
   "src/utils/image/image-processor.test.ts",
   "src/features/weixin-article/domain/article-source.test.ts",
@@ -35,12 +38,22 @@ const TEST_FILES = [
   "src/registry/provider-registry.test.ts",
   "src/core/workflow/local-workflow-runtime.test.ts",
   "src/utils/llm-output.test.ts",
+  "src/utils/llm-structured-output.test.ts",
   "src/modules/content-rank/ai.content-ranker.test.ts",
   "src/features/weixin-article/workflow.test.ts",
   "src/features/weixin-article/services/article-cover.service.test.ts",
   "src/features/weixin-article/services/article-image-layout.service.test.ts",
   "src/features/weixin-article/services/article-render.service.test.ts",
   "src/features/weixin-article/services/content-scrape.service.test.ts",
+  "src/features/weixin-article/services/content-process.service.test.ts",
+  "src/features/weixin-article/services/editorial-topic.service.test.ts",
+  "src/features/weixin-article/services/editorial-decision.service.test.ts",
+  "src/features/weixin-article/services/article-plan.service.test.ts",
+  "src/features/weixin-article/services/article-research.service.test.ts",
+  "src/features/weixin-article/services/article-revision.service.test.ts",
+  "src/features/weixin-article/services/quality-review.service.test.ts",
+  "src/features/weixin-article/services/quality-gate.service.test.ts",
+  "src/experiments/article-quality/research.service.test.ts",
   "src/features/weixin-article/rendering/dynamic",
   "src/features/weixin-article/rendering/test/test.weixin.dynamic.template.ts",
   "src/features/weixin-article/rendering/test/test.weixin.template.ts",
@@ -85,6 +98,7 @@ await new Command()
       (args) => run(DENO, ["run", "-A", "scripts/run.workflow.ts", ...args]),
     ),
   )
+  .command("experiment", experimentCommand())
   .command(
     "preview",
     passthrough(
@@ -347,6 +361,22 @@ function dashboardCommand() {
     );
 }
 
+function experimentCommand() {
+  return new Command()
+    .description("研发实验工具。")
+    .action(() => printExperimentHelp())
+    .command(
+      "article-quality",
+      passthrough("运行文章质量 A/B dry-run 实验。", (args) =>
+        run(DENO, [
+          "run",
+          "-A",
+          "src/experiments/article-quality/run.ts",
+          ...args,
+        ])),
+    );
+}
+
 function docsCommand() {
   return new Command()
     .description("VitePress 文档开发和构建。")
@@ -526,6 +556,7 @@ function printHelp() {
   deno task verify              发布前完整检查
   deno task test                运行测试
   deno task article --dry-run   跑微信文章 dry-run
+  deno task experiment article-quality  运行临时文章质量实验
   deno task article             真实创建微信公众号草稿
   deno task preview             生成模板预览
   deno task relay               启动微信发布 relay
@@ -534,5 +565,11 @@ function printHelp() {
   deno task cf deploy           部署 Cloudflare Worker
   deno task dashboard           只启动 dashboard 前端开发服务
   deno task docs                启动文档开发服务
+`);
+}
+
+function printExperimentHelp() {
+  console.log(`实验工具:
+  deno task experiment article-quality
 `);
 }

@@ -21,15 +21,29 @@ import { KvArtifactStore } from "@src/platform/cloudflare/kv-artifact-store.ts";
 import { KvD1RunStateStore } from "@src/platform/cloudflare/kv-d1-run-state-store.ts";
 import { D1VectorStore } from "@src/platform/cloudflare/d1-vector-store.ts";
 import { D1RuntimeConfigStore } from "@src/platform/cloudflare/d1-runtime-config-store.ts";
+import { D1EditorialMemoryStore } from "@src/platform/cloudflare/d1-editorial-memory-store.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
 import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
+import { WeixinPublisher } from "@src/integrations/publish/providers/weixin-publisher.ts";
+import { WeixinRelayPublisher } from "@src/integrations/publish/providers/weixin-relay-publisher.ts";
 import { withLoggerContext } from "@src/core/logger/logger-context.ts";
 import {
   resolveArticleRuntimeConfig,
   seedArticleRuntimeConfig,
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
-import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
+import {
+  type ArtifactObject,
+  type ArtifactRef,
+  type ArtifactStore,
+  decodeJsonArtifact,
+  decodeTextArtifact,
+} from "@src/core/ports/artifact-store.ts";
+import type {
+  ContentPublisher,
+  PublishResult,
+} from "@src/core/ports/content-publisher.ts";
+import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import type {
   CloudflareD1Database,
   CloudflareKvNamespace,
@@ -110,6 +124,9 @@ export class WeixinArticleCloudflareWorkflow
           artifactStore: createCloudflareArtifactStore(this.env),
           runStateStore: new KvD1RunStateStore(
             this.env.ARTICLE_RUNS,
+            this.env.ARTICLE_DB,
+          ),
+          editorialMemoryStore: new D1EditorialMemoryStore(
             this.env.ARTICLE_DB,
           ),
           vectorStoreFactory: async () =>
@@ -220,6 +237,7 @@ function createStores(env: CloudflareEnv) {
     artifactStore: createCloudflareArtifactStore(env),
     runStateStore: new KvD1RunStateStore(env.ARTICLE_RUNS, env.ARTICLE_DB),
     runtimeConfigStore: new D1RuntimeConfigStore(env.ARTICLE_DB),
+    editorialMemoryStore: new D1EditorialMemoryStore(env.ARTICLE_DB),
   };
 }
 
@@ -258,13 +276,11 @@ async function handleHealthRequest(
   }
 
   try {
-    const key = `health:${crypto.randomUUID()}`;
-    await env.ARTICLE_RUNS.put(key, "ok", { expirationTtl: 60 });
-    const value = await env.ARTICLE_RUNS.get(key);
-    await env.ARTICLE_RUNS.delete(key);
+    await env.ARTICLE_RUNS.get("runs:latest");
     checks.kv = {
-      ok: value === "ok",
-      detail: "ARTICLE_RUNS read/write/delete",
+      ok: true,
+      detail:
+        "ARTICLE_RUNS readable; run history source=D1, KV cache writes are optional",
     };
   } catch (error) {
     checks.kv = {
@@ -390,7 +406,219 @@ async function handleRunsRequest(
     return Response.json({ run });
   }
 
+  const publishMatch = pathname.match(/^\/api\/runs\/([^/]+)\/publish$/);
+  if (request.method === "POST" && publishMatch) {
+    return await handlePublishExistingRunRequest(
+      request,
+      env,
+      decodeURIComponent(publishMatch[1]),
+    );
+  }
+
+  const feedbackMatch = pathname.match(/^\/api\/runs\/([^/]+)\/feedback$/);
+  if (feedbackMatch) {
+    const runId = decodeURIComponent(feedbackMatch[1]);
+    if (request.method === "GET") {
+      const feedback = await stores.editorialMemoryStore.getFeedback(runId);
+      return Response.json({ feedback });
+    }
+    if (request.method === "PUT") {
+      const payload = await request.json().catch(() => ({})) as {
+        rating?: string;
+        note?: string;
+        profileId?: string;
+      };
+      const rating = normalizeFeedbackRating(payload.rating);
+      if (!rating) {
+        return Response.json(
+          { error: "rating 必须是 good / ok / bad" },
+          { status: 400 },
+        );
+      }
+      const feedback = await stores.editorialMemoryStore.saveFeedback({
+        runId,
+        profileId: typeof payload.profileId === "string"
+          ? payload.profileId
+          : undefined,
+        rating,
+        note: typeof payload.note === "string" ? payload.note : undefined,
+      });
+      return Response.json({ feedback });
+    }
+    if (request.method === "DELETE") {
+      const deleted = await stores.editorialMemoryStore.deleteFeedback(runId);
+      return Response.json({ deleted });
+    }
+  }
+
   return Response.json({ error: "无效的 runs API" }, { status: 404 });
+}
+
+async function handlePublishExistingRunRequest(
+  request: Request,
+  env: CloudflareEnv,
+  runId: string,
+): Promise<Response> {
+  const payload = await request.json().catch(() => ({})) as {
+    forcePublish?: boolean;
+  };
+  if (!payload.forcePublish) {
+    return Response.json(
+      { error: "真实发布需要 forcePublish=true" },
+      { status: 400 },
+    );
+  }
+
+  await initializeCloudflareConfig(env);
+  const stores = createStores(env);
+  const run = await stores.runStateStore.getRun(runId);
+  if (!run) {
+    return Response.json({ error: "run 不存在" }, { status: 404 });
+  }
+  if (run.dryRun) {
+    return Response.json(
+      { error: "dry-run 产物不能直接发布，请重新生成真实发布 run" },
+      { status: 400 },
+    );
+  }
+
+  const artifactStore = stores.artifactStore;
+  const publishKey = artifactStore.createRunKey(
+    runId,
+    "20-publish-result",
+    "json",
+  );
+  const existingPublish = await artifactStore.getObject(publishKey);
+  if (existingPublish) {
+    return Response.json({
+      success: true,
+      reused: true,
+      result: decodeJsonArtifact<PublishResult>(existingPublish.body),
+      artifact: existingPublish.ref,
+    });
+  }
+
+  const config = await getAppConfig();
+  const publisher = createCloudflarePublisher(config);
+  const titleObject = await getFirstArtifactObject(artifactStore, runId, [
+    "18-final-title.json",
+    "10-title.json",
+  ]);
+  const htmlObject = await getFirstArtifactObject(artifactStore, runId, [
+    "19-final-article.html",
+    "16-revised-article-round-1.html",
+    "12-rendered-article.html",
+  ]);
+  const coverObject = await getFirstArtifactObject(artifactStore, runId, [
+    "11-cover.json",
+  ]);
+
+  await stores.runStateStore.startStep(runId, "publish-existing-run", {
+    inputArtifacts: [titleObject.ref, htmlObject.ref, coverObject.ref],
+  });
+  try {
+    const titleSnapshot = decodeJsonArtifact<{ title?: string }>(
+      titleObject.body,
+    );
+    const coverSnapshot = decodeJsonArtifact<{ mediaId?: string }>(
+      coverObject.body,
+    );
+    const title = titleSnapshot.title?.trim();
+    const coverMediaId = coverSnapshot.mediaId?.trim();
+    if (!title) {
+      throw new Error("发布产物缺少标题");
+    }
+    if (!coverMediaId) {
+      throw new Error("发布产物缺少封面 mediaId");
+    }
+
+    const result = await publisher.publishArticle({
+      content: decodeTextArtifact(htmlObject.body),
+      title,
+      digest: title,
+      coverMediaId,
+    });
+    const publishRef = await artifactStore.putJson(publishKey, result, {
+      label: "发布结果",
+      contentType: "application/json",
+    });
+    await stores.runStateStore.finishStep(runId, "publish-existing-run", {
+      outputArtifacts: [publishRef],
+    });
+    await stores.runStateStore.finishRun(runId, {
+      summary: [
+        run.summary ?? "Cloudflare 文章生成完成",
+        `补发布: ${result.status}${result.url ? ` (${result.url})` : ""}`,
+      ].join("\n"),
+      artifacts: mergeArtifactRefs(run.artifacts, publishRef),
+    });
+    return Response.json({ success: true, result, artifact: publishRef });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await stores.runStateStore.failStep(
+      runId,
+      "publish-existing-run",
+      message,
+    ).catch(() => {});
+    await stores.runStateStore.failRun(runId, message).catch(() => {});
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+function createCloudflarePublisher(
+  config: ResolvedTrendPublishConfig,
+): ContentPublisher {
+  switch (config.features.article.publisher.provider) {
+    case "weixin":
+      return new WeixinPublisher(config.providers.publish.weixin);
+    case "weixin-relay":
+      return new WeixinRelayPublisher(config.providers.publish.weixinRelay);
+  }
+}
+
+async function getFirstArtifactObject(
+  artifactStore: ArtifactStore,
+  runId: string,
+  candidates: string[],
+): Promise<ArtifactObject> {
+  for (const candidate of candidates) {
+    const [name, extension] = splitArtifactCandidate(candidate);
+    const object = await artifactStore.getObject(
+      artifactStore.createRunKey(runId, name, extension),
+    );
+    if (object) {
+      return object;
+    }
+  }
+  throw new Error(`run ${runId} 缺少 artifact: ${candidates.join(" / ")}`);
+}
+
+function splitArtifactCandidate(candidate: string): [string, string] {
+  const index = candidate.lastIndexOf(".");
+  if (index <= 0 || index === candidate.length - 1) {
+    throw new Error(`非法 artifact 候选: ${candidate}`);
+  }
+  return [candidate.slice(0, index), candidate.slice(index + 1)];
+}
+
+function mergeArtifactRefs(
+  artifacts: ArtifactRef[],
+  next: ArtifactRef,
+): ArtifactRef[] {
+  const seen = new Set<string>();
+  const merged: ArtifactRef[] = [];
+  for (const artifact of [...artifacts, next]) {
+    if (seen.has(artifact.key)) continue;
+    seen.add(artifact.key);
+    merged.push(artifact);
+  }
+  return merged;
+}
+
+function normalizeFeedbackRating(
+  value: string | undefined,
+): "good" | "ok" | "bad" | null {
+  return value === "good" || value === "ok" || value === "bad" ? value : null;
 }
 
 async function handleArtifactRequest(

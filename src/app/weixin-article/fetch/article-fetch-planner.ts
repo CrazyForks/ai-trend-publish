@@ -1,12 +1,14 @@
 import {
   ArticleFetchProvider,
   ArticleSource,
+  ArticleSourceKind,
   parseArticleSources,
 } from "@src/features/weixin-article/domain/article-source.ts";
 import {
   FetchProviderId,
   fetchProviderRegistry,
   inferFetchProvider,
+  isSearchFetchProvider,
 } from "@src/integrations/fetch/fetch-provider-registry.ts";
 import {
   FetchProviderName,
@@ -31,8 +33,12 @@ export function planArticleSources(
       );
     }
 
-    const providers = resolveSourceProviders(source.url, groupProviders);
-    validateSourceProviders(source.url, providers, config);
+    const providers = resolveSourceProviders(
+      source.url,
+      groupProviders,
+      source.kind,
+    );
+    validateSourceProviders(source.url, source.kind, providers, config);
 
     return {
       ...source,
@@ -42,34 +48,82 @@ export function planArticleSources(
 }
 
 export function resolveSourceProviders(
-  url: string,
+  sourceValue: string,
   groupProviders: FetchProviderName[],
+  kind: ArticleSourceKind = "url",
 ): ArticleFetchProvider[] {
   if (groupProviders.length === 0) {
-    throw new Error(`数据源 ${url} 的抓取分组未配置任何 provider`);
+    throw new Error(`数据源 ${sourceValue} 的抓取分组未配置任何 provider`);
   }
 
   const providers = groupProviders.flatMap((provider) =>
-    provider === "auto" ? [inferFetchProvider(url)] : [provider]
+    provider === "auto" ? [inferProvider(sourceValue, kind)] : [provider]
   );
   return [...new Set(providers)] as ArticleFetchProvider[];
 }
 
-export function inferProvider(url: string): ArticleFetchProvider {
-  return inferFetchProvider(url);
+export function inferProvider(
+  sourceValue: string,
+  kind: ArticleSourceKind = "url",
+): ArticleFetchProvider {
+  if (kind === "query") return "jina-search";
+  return inferFetchProvider(sourceValue);
 }
 
 function validateSourceProviders(
-  url: string,
+  sourceValue: string,
+  kind: ArticleSourceKind,
   providers: ArticleFetchProvider[],
   config: Pick<ResolvedTrendPublishConfig, "providers">,
 ): void {
   for (const provider of providers) {
+    if (kind === "query" && !isSearchFetchProvider(provider)) {
+      throw new Error(
+        `搜索数据源 ${sourceValue} 只能使用搜索类 provider`,
+      );
+    }
+    if (kind === "url" && isSearchFetchProvider(provider)) {
+      throw new Error(
+        `URL 数据源 ${sourceValue} 不能使用搜索类 provider`,
+      );
+    }
     const adapter = fetchProviderRegistry.get(provider as FetchProviderId);
     if (!adapter.isConfigured(config as ResolvedTrendPublishConfig)) {
       throw new Error(
-        `数据源 ${url} 需要配置 providers.fetch.${provider}`,
+        `数据源 ${sourceValue} 需要配置 ${
+          getFetchProviderConfigHint(provider)
+        }`,
       );
     }
+  }
+}
+
+function getFetchProviderConfigHint(provider: ArticleFetchProvider): string {
+  switch (provider) {
+    case "firecrawl":
+      return "providers.fetch.firecrawl.apiKey";
+    case "jina":
+    case "jina-search":
+      return "providers.fetch.jina.apiKey";
+    case "brave-search":
+      return "providers.fetch.brave.apiKey";
+    case "tavily-search":
+      return "providers.fetch.tavily.apiKey";
+    case "exa-search":
+      return "providers.fetch.exa.apiKey";
+    case "serper-search":
+      return "providers.fetch.serper.apiKey";
+    case "newsapi":
+      return "providers.fetch.newsapi.apiKey";
+    case "gdelt":
+    case "hackernews":
+    case "arxiv":
+      return "无需 API Key";
+    case "twitter":
+      return "providers.fetch.twitter.bearerToken 或 providers.fetch.twitter.xquikApiKey";
+    case "rss":
+      return "providers.fetch.rss.baseUrl";
+    default:
+      return `providers.fetch.${provider}`;
   }
 }

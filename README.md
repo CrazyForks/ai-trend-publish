@@ -1,12 +1,16 @@
 # TrendPublish
 
-TrendPublish 是一个基于 Deno 和 TypeScript
-的微信文章自动发布系统。它可以抓取网页、RSS、Twitter/X
-等数据源，使用大模型完成内容排序、摘要、标题、排版和配图，最后生成并发布到微信公众号。
+TrendPublish
+是一个面向微信公众号的自动化选题与发布系统。它从你指定的数据源中抓取内容，用 AI
+做选题、证据补全、排序、标题、正文生成、审稿、排版和配图，最后生成可预览的
+dry-run 产物或创建微信公众号草稿。
 
-项目当前聚焦一条主链路：**微信文章发布**。配置集中在
-`trendpublish.config.ts`，可以用 TypeScript
-类型提示组织模型、抓取源、模板、图片、去重和通知能力。
+它不是一个简单的 RSS
+摘要脚本，而是一条可观察、可回滚、可调参的文章生产流水线：每次运行都会留下步骤、错误、质量审稿、HTML、图片和配置快照，方便你复盘为什么这篇文章值得发，以及哪里需要人工介入。
+
+项目当前聚焦一条主链路：**微信文章自动发布**。本地、Docker 和 Cloudflare
+都使用同一套 TypeScript 配置模型；Dashboard
+中可编辑数据源、文章方案、共享能力和定时规则，下一次运行即时生效，密钥仍留在部署环境中。
 
 ![star](https://atomgit.com/liyown/ai-trend-publish/star/badge.svg)
 
@@ -18,28 +22,81 @@ TrendPublish 是一个基于 Deno 和 TypeScript
 - QQ 群：
   <a href="https://qun.qq.com/universal-share/share?ac=1&authKey=E68gaXeajH49WXeIiawSS2Smr6uaSYe5zG9VDAEZa6sJgnNTcZd5X7r%2Fi3G6qVOa&busi_data=eyJncm91cENvZGUiOiI3Mzc5MDI3MzEiLCJ0b2tlbiI6Ijd2ZWN6THd6VFQ1TkNvYVJwQVpIbEtRSlM2UTJnYWhlMGxVMWhGUlNKMkV3MytoQWl6bUdNRGl3QjE0bklJMTUiLCJ1aW4iOiIxNTM2NzI3OTI1In0%3D&data=x1m4pt9JPKytsxKlmRh7duo4bnkRCLdhOFY_BhQenSr2dav7_0PoNpJc2sMzZdj3sKt9EPMR_AD9hlwI78HKUA&svctype=4&tempid=h5_group_info" target="_blank" rel="noopener noreferrer">TrendPublish-1</a>
 
-## 核心能力
+## 为什么做这个
 
-- 多源抓取：支持普通 URL、RSS/RSSHub、FireCrawl、Jina Reader / DeepSearch、
-  Twitter/X 与 Xquik。
-- AI 内容处理：支持 OpenAI Chat Completions
-  兼容接口，用于排序、摘要、润色、标题和动态模板生成。
-- 微信文章渲染：内置多套公众号模板，支持 `dynamic` 动态模板和 `minimal`
-  等静态模板。
-- 智能配图：支持阿里云图片生成和 MiniMax 图片生成，用于封面图和可选正文配图。
-- 服务覆盖：大模型、数据源获取、图片生成、发布、通知和存储都按能力拆分，
-  现在能直接使用，后续也方便继续补充。
-- 发布与调试：支持微信公众号草稿/发布接口，也支持 dry-run 输出本地 HTML。
-- 日志观测：所有 Logger 输出都可镜像到结构化 stdout 或 HTTP 日志平台。
-- 可选增强：支持本地 SQLite / Cloudflare D1 向量去重，以及
-  Bark、钉钉、飞书工作流通知。
+日更类公众号真正耗时的不是“让模型写一段摘要”，而是稳定地完成这些事情：
+
+- 找到足够好的材料，而不是每次只抓到一批重复新闻。
+- 判断今天该写什么，哪些只适合短讯，哪些应该跳过。
+- 保留证据链，避免文章看起来流畅但事实支撑不足。
+- 标题和正文要像人写的内容，不能一眼看出是模板化 AI 速递。
+- 图片、排版、微信兼容 HTML、草稿发布、失败重试都要稳定。
+- 出错时要能看到是哪一步失败，而不是只得到一个终端异常。
+
+TrendPublish 的设计目标就是把这些步骤变成一条清晰的自动化流程：AI
+可以参与选题和创作，但每一步都可追踪、可配置、可 dry-run。
+
+## 核心特点
+
+- **文章质量优先**：内置选题聚类、编辑决策、文章计划、质量审稿和最多一次定向修订，不只做摘要拼接。
+- **多源内容发现**：支持普通网页、RSS/RSSHub、FireCrawl、Jina
+  Reader/Search、Brave、Tavily、Exa、Serper、NewsAPI、GDELT、Hacker
+  News、arXiv、Twitter/X、Xquik。
+- **证据链与补充搜索**：可以用搜索型数据源补全上下文，把选题依据和风险写进运行产物。
+- **微信友好渲染**：内置多套公众号模板，支持 `dynamic` 动态排版，所有 HTML
+  都会做微信兼容清洗。
+- **AI 配图**：支持阿里云图片生成和 MiniMax 图片生成，可用于封面图和正文配图。
+- **可观察工作流**：Dashboard
+  可查看运行列表、步骤时间线、错误解释、质量报告、HTML/JSON/图片产物。
+- **运行时配置中心**：数据源、文章方案、能力 Profile、定时规则可在 Dashboard
+  修改，下一次运行生效。
+- **部署方式灵活**：本地/Docker 保持完整能力；Cloudflare 使用
+  Worker/Workflows/D1/KV/R2 原生运行；微信真实发布可通过固定 IP relay。
+- **能力可扩展**：大模型、抓取、图片生成、通知、向量去重、发布都以
+  provider/adapter 方式接入，后续扩展不会改穿业务层。
+
+## 产品界面
+
+发布中心会先告诉你最近一次运行结果、当前是否建议进入草稿箱，以及下一步应该检查什么。
+
+![TrendPublish 发布中心](https://oss.liuyaowen.cn/images/dashboard-publish-center.png)
+
+运行页展示每次 workflow
+的步骤、耗时、错误、人工反馈和产物入口，便于定位问题和复盘文章质量。
+
+![TrendPublish 运行详情](https://oss.liuyaowen.cn/images/dashboard-runs.png)
+
+系统设置页用于维护文章方案、定时规则、共享能力和高级
+JSON。日常使用不需要手写配置文件。
+
+![TrendPublish 系统设置](https://oss.liuyaowen.cn/images/dashboard-settings.png)
 
 ## 适合场景
 
-- 每天自动整理技术、产品、商业或研究资讯，并发布到微信公众号。
-- 使用固定数据源生成 AI 资讯简报。
-- 用可控模板生成公众号正文，减少手动排版成本。
-- 需要先本地预览、dry-run 验证，再正式发布的内容工作流。
+- 每天自动整理 AI、技术、产品、商业或研究资讯，并发布到微信公众号。
+- 维护一组固定数据源，让系统自动发现值得写的选题。
+- 在正式发布前先 dry-run，审阅 HTML、配图、质量报告和错误。
+- 用 Cloudflare 定时运行，或在自己的服务器/Docker 上完整部署。
+- 后续希望扩展到小红书、邮件简报、飞书文档、静态站等其他内容出口。
+
+## 工作流
+
+```mermaid
+flowchart LR
+  A["数据源<br/>URL / RSS / Search / Social"] --> B["抓取与清洗"]
+  B --> C["去重与历史记忆"]
+  C --> D["选题聚类与排序"]
+  D --> E["证据补全"]
+  E --> F["文章计划"]
+  F --> G["正文 / 标题 / 配图"]
+  G --> H["质量审稿与修订"]
+  H --> I["微信兼容 HTML"]
+  I --> J{"dry-run?"}
+  J -->|是| K["保存 HTML / JSON / 图片产物"]
+  J -->|否| L["上传素材并创建微信草稿"]
+  K --> M["Dashboard 复盘"]
+  L --> M
+```
 
 ## 快速开始
 
@@ -245,13 +302,26 @@ features: {
 - RSS / RSSHub：直接写 RSS URL；RSSHub 可配置 `providers.fetch.rss.baseUrl`。
 - FireCrawl：[申请地址](https://firecrawl.dev/)；配置
   `providers.fetch.firecrawl.apiKey`。
-- Jina Reader / DeepSearch：[申请地址](https://jina.ai/reader/)；配置
+- Jina Reader / Search：[申请地址](https://jina.ai/reader/)；配置
   `providers.fetch.jina.apiKey`。
+- Brave Search：[申请地址](https://brave.com/search/api/)；配置
+  `providers.fetch.brave.apiKey`，适合作为低成本通用搜索入口。
+- Tavily：[申请地址](https://www.tavily.com/)；配置
+  `providers.fetch.tavily.apiKey`，适合 AI research / agent 风格搜索。
+- Exa：[申请地址](https://exa.ai/)；配置 `providers.fetch.exa.apiKey`，
+  适合语义搜索和研究型选题。
+- Serper：[申请地址](https://serper.dev/)；配置
+  `providers.fetch.serper.apiKey`，适合需要 Google SERP 覆盖的场景。
+- NewsAPI：[申请地址](https://newsapi.org/)；配置
+  `providers.fetch.newsapi.apiKey`，适合新闻搜索，生产限制以官方套餐为准。
+- GDELT：无需 API Key，适合全球新闻线索。
+- Hacker News：无需 API Key，适合技术社区线索。
+- arXiv：无需 API Key，适合论文和研究线索。
 - Twitter/X：[申请地址](https://developer.x.com/)；配置
   `providers.fetch.twitter.bearerToken`。
 - Xquik：[申请地址](https://xquik.com/en/api-keys)；配置
   `providers.fetch.twitter.xquikApiKey`。
-- 后续：GitHub、Hacker News、Product Hunt、YouTube、搜索引擎结果源。
+- 关键词搜索数据源写成 `search:关键词`，路由到 `fetchGroups.search`。
 
 ### 图片生成
 
@@ -325,6 +395,23 @@ deno task cf deploy
 `deno task dev`，它会同时启动后端和前端 watch。
 
 ## 项目结构
+
+整体采用 modular monolith：业务能力集中在微信文章 feature，外部服务统一放在
+integrations，运行时和存储通过 ports 隔离。
+
+```mermaid
+flowchart TB
+  UI["Dashboard / CLI / API"] --> APP["app/weixin-article<br/>应用组装层"]
+  APP --> WF["Workflow Runtime<br/>Local / Cloudflare"]
+  APP --> FEATURE["features/weixin-article<br/>业务编排与领域服务"]
+  FEATURE --> MODULES["modules<br/>排序 / 摘要 / Markdown 等内部能力"]
+  FEATURE --> PORTS["core/ports<br/>LLM / Fetch / Image / Publish / Store"]
+  PORTS --> INTEGRATIONS["integrations<br/>外部服务 Adapter"]
+  INTEGRATIONS --> EXT["LLM / Search / Image / Weixin / Notify"]
+  WF --> STORAGE["ArtifactStore / RunStateStore / VectorStore"]
+  STORAGE --> LOCAL["Local SQLite / 文件"]
+  STORAGE --> CF["Cloudflare D1 / KV / R2"]
+```
 
 ```text
 src/

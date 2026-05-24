@@ -26,6 +26,7 @@ import type {
   CapabilityProfile,
   JsonObject,
   JsonValue,
+  RuntimeArticleSource,
   RuntimeArticleSourceInput,
   RuntimeConfigStore,
 } from "@src/core/ports/runtime-config-store.ts";
@@ -236,7 +237,7 @@ export async function getArticleRuntimeProfileDetail(
   return {
     profile,
     article: readArticleConfig(profile.config, baseConfig),
-    sources: await store.listArticleSources(profile.id),
+    sources: await getArticleSources(store, profile.id, baseConfig),
     fetchGroups,
     schedule: await store.getSchedule(profile.id),
   };
@@ -337,6 +338,12 @@ export async function resolveArticleRuntimeConfig(
     enabled: article.deduplication.enabled && embedding.enabled,
     embeddingProvider: "dashscope",
     vectorStore: article.deduplication.vectorStore,
+  };
+  next.features.article.sourceLimits = {
+    ...article.sourceLimits,
+  };
+  next.features.article.qualityGate = {
+    ...article.qualityGate,
   };
   const embeddingModel = stringValue(embedding.config.model);
   if (embeddingModel) next.providers.vector.embedding.model = embeddingModel;
@@ -460,6 +467,17 @@ export function defaultArticleProfileConfig(
       embeddingProfileId: DEFAULT_EMBEDDING_CAPABILITY_ID,
       vectorStore: article.deduplication.vectorStore,
     },
+    sourceLimits: {
+      maxAgeDays: article.sourceLimits.maxAgeDays,
+      maxItemsPerSource: article.sourceLimits.maxItemsPerSource,
+    },
+    qualityGate: {
+      enabled: article.qualityGate.enabled,
+      minScore: article.qualityGate.minScore,
+      blockOnHighFactIssue: article.qualityGate.blockOnHighFactIssue,
+      allowForcePublish: article.qualityGate.allowForcePublish,
+      maxRevisionRounds: article.qualityGate.maxRevisionRounds,
+    },
     notifications: {
       profileId: DEFAULT_NOTIFICATION_CAPABILITY_ID,
     },
@@ -478,6 +496,8 @@ export function readArticleConfig(
   const bodyImages = objectValue(value.bodyImages);
   const bodyOverrides = objectValue(bodyImages.overrides);
   const deduplication = objectValue(value.deduplication);
+  const sourceLimits = objectValue(value.sourceLimits);
+  const qualityGate = objectValue(value.qualityGate);
   const notifications = objectValue(value.notifications);
   return {
     count: numberValue(value.count) ?? fallback.count,
@@ -523,6 +543,32 @@ export function readArticleConfig(
         deduplication.vectorStore,
         fallback.deduplication.vectorStore,
       ),
+    },
+    sourceLimits: {
+      maxAgeDays: normalizeInteger(
+        sourceLimits.maxAgeDays,
+        fallback.sourceLimits.maxAgeDays,
+        1,
+        365,
+      ),
+      maxItemsPerSource: normalizeInteger(
+        sourceLimits.maxItemsPerSource,
+        fallback.sourceLimits.maxItemsPerSource,
+        1,
+        200,
+      ),
+    },
+    qualityGate: {
+      enabled: booleanValue(qualityGate.enabled) ??
+        fallback.qualityGate.enabled,
+      minScore: numberValue(qualityGate.minScore) ??
+        fallback.qualityGate.minScore,
+      blockOnHighFactIssue: booleanValue(qualityGate.blockOnHighFactIssue) ??
+        fallback.qualityGate.blockOnHighFactIssue,
+      allowForcePublish: booleanValue(qualityGate.allowForcePublish) ??
+        fallback.qualityGate.allowForcePublish,
+      maxRevisionRounds: numberValue(qualityGate.maxRevisionRounds) ??
+        fallback.qualityGate.maxRevisionRounds,
     },
     notifications: {
       profileId: stringValue(notifications.profileId) ??
@@ -599,6 +645,17 @@ function articleConfigToResolvedFallback(
       embeddingProvider: "dashscope",
       vectorStore: config.deduplication.vectorStore,
     },
+    sourceLimits: {
+      maxAgeDays: config.sourceLimits.maxAgeDays,
+      maxItemsPerSource: config.sourceLimits.maxItemsPerSource,
+    },
+    qualityGate: {
+      enabled: config.qualityGate.enabled,
+      minScore: config.qualityGate.minScore,
+      blockOnHighFactIssue: config.qualityGate.blockOnHighFactIssue,
+      allowForcePublish: config.qualityGate.allowForcePublish,
+      maxRevisionRounds: config.qualityGate.maxRevisionRounds,
+    },
   };
 }
 
@@ -608,15 +665,77 @@ async function getFetchGroups(
   baseConfig: ResolvedTrendPublishConfig,
 ): Promise<Record<string, FetchProviderName[]>> {
   const groups = await store.getArticleFetchGroups(profileId);
-  const normalized = Object.fromEntries(
+  const runtimeGroups = Object.fromEntries(
     Object.entries(groups).map(([name, providers]) => [
       name,
       providers as FetchProviderName[],
     ]),
   );
-  return Object.keys(normalized).length > 0
-    ? normalized
-    : normalizeFetchGroups(baseConfig.fetchGroups);
+  return mergeFetchGroups(baseConfig.fetchGroups, runtimeGroups);
+}
+
+function mergeFetchGroups(
+  baseGroups: Record<string, FetchProviderName[]>,
+  runtimeGroups: Record<string, FetchProviderName[]>,
+): Record<string, FetchProviderName[]> {
+  const normalizedBase = normalizeFetchGroups(baseGroups);
+  const normalizedRuntime = normalizeFetchGroups(runtimeGroups);
+  const names = new Set([
+    ...Object.keys(normalizedBase),
+    ...Object.keys(normalizedRuntime),
+  ]);
+
+  const merged: Record<string, FetchProviderName[]> = {};
+  for (const name of names) {
+    const runtimeProviders = normalizedRuntime[name] ?? [];
+    const baseProviders = normalizedBase[name] ?? [];
+    merged[name] = [
+      ...runtimeProviders,
+      ...baseProviders.filter((provider) =>
+        !runtimeProviders.includes(provider)
+      ),
+    ];
+  }
+  return normalizeFetchGroups(merged);
+}
+
+async function getArticleSources(
+  store: RuntimeConfigStore,
+  profileId: string,
+  baseConfig: ResolvedTrendPublishConfig,
+): Promise<RuntimeArticleSource[]> {
+  const runtimeSources = await store.listArticleSources(profileId);
+  const runtimeKeys = new Set(runtimeSources.map(sourceKey));
+  const maxPosition = runtimeSources.reduce(
+    (max, source) => Math.max(max, source.position),
+    -1,
+  );
+  const configSources = parseSourcesForRuntime(
+    baseConfig.features.article.sources,
+  )
+    .filter((source) => !runtimeKeys.has(sourceKey(source)))
+    .map((source, index): RuntimeArticleSource => ({
+      id: `config:${profileId}:${index}`,
+      profileId,
+      raw: source.raw,
+      url: source.url,
+      group: source.group,
+      enabled: source.enabled ?? true,
+      position: maxPosition + index + 1,
+      createdAt: "",
+      updatedAt: "",
+    }));
+
+  return [...runtimeSources, ...configSources].toSorted((a, b) =>
+    a.position - b.position
+  );
+}
+
+function sourceKey(source: {
+  group: string;
+  url: string;
+}): string {
+  return `${source.group}:${source.url}`;
 }
 
 async function requireCapability(
@@ -728,6 +847,19 @@ function numberValue(value: JsonValue | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function normalizeInteger(
+  value: JsonValue | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const number = numberValue(value);
+  if (number === undefined) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.floor(number), min), max);
 }
 
 function booleanValue(value: JsonValue | undefined): boolean | undefined {

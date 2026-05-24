@@ -11,8 +11,9 @@ import {
 } from "@src/prompts/summarizer.prompt.ts";
 import { RetryUtil } from "@src/utils/retry.util.ts";
 import { Logger } from "@zilla/logger";
-import { cleanLLMJsonText, cleanLLMTitle } from "@src/utils/llm-output.ts";
+import { cleanLLMTitle } from "@src/utils/llm-output.ts";
 import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
+import { createStructuredJsonCompletion } from "@src/utils/llm-structured-output.ts";
 
 const logger = new Logger("ai-summarizer");
 
@@ -32,34 +33,32 @@ export class AISummarizer implements ContentSummarizer {
       throw new Error("Content is required for summarization");
     }
 
-    return RetryUtil.retryOperation(async () => {
-      const response = await this.llm.createChatCompletion([
-        {
-          role: "system",
-          content: getSummarizerSystemPrompt(this.promptProfile),
-        },
-        {
-          role: "user",
-          content: getSummarizerUserPrompt({
-            content,
-            language: options?.language,
-            minLength: options?.minLength,
-            maxLength: options?.maxLength,
-            promptProfile: this.promptProfile,
-          }),
-        },
-      ], {
+    const messages = [
+      {
+        role: "system" as const,
+        content: getSummarizerSystemPrompt(this.promptProfile),
+      },
+      {
+        role: "user" as const,
+        content: getSummarizerUserPrompt({
+          content,
+          language: options?.language,
+          minLength: options?.minLength,
+          maxLength: options?.maxLength,
+          promptProfile: this.promptProfile,
+        }),
+      },
+    ];
+    return await createStructuredJsonCompletion<Summary, Summary>({
+      label: "摘要",
+      llm: this.llm,
+      messages,
+      chatOptions: {
         temperature: 0.7,
         response_format: { type: "json_object" },
-      });
-
-      const completion = response.choices[0]?.message?.content;
-      if (!completion) {
-        throw new Error("未获取到有效的摘要结果");
-      }
-
-      try {
-        const summary = JSON.parse(cleanLLMJsonText(completion)) as Summary;
+      },
+      maxAttempts: 2,
+      normalize: (summary) => {
         if (
           !summary.title ||
           !summary.content
@@ -67,13 +66,7 @@ export class AISummarizer implements ContentSummarizer {
           throw new Error("摘要结果格式不正确");
         }
         return summary;
-      } catch (error) {
-        throw new Error(
-          `解析摘要结果失败: ${
-            error instanceof Error ? error.message : "未知错误"
-          }`,
-        );
-      }
+      },
     });
   }
 

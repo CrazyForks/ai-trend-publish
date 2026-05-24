@@ -7,13 +7,27 @@ import { WorkflowTerminateError } from "@src/core/workflow/workflow-error.ts";
 import { Logger } from "@zilla/logger";
 import { WeixinArticleDependencies } from "@src/features/weixin-article/dependencies.ts";
 import type { ArtifactRef } from "@src/core/ports/artifact-store.ts";
+import { decodeJsonArtifact } from "@src/core/ports/artifact-store.ts";
 import type { PublishResult } from "@src/core/ports/content-publisher.ts";
 import type { RankResult } from "@src/core/ports/content-ranker.ts";
 import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
+import type { ArticleSourceFilter } from "@src/features/weixin-article/services/content-scrape.service.ts";
 import type { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
 import type { WeixinArticleSourceLoadResult } from "@src/features/weixin-article/services/content-scrape.service.ts";
 import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 import type { CoverGenerationResult } from "@src/features/weixin-article/services/article-cover.service.ts";
+import type { EditorialTopicReport } from "@src/features/weixin-article/domain/editorial-topic.ts";
+import type { EditorialDecision } from "@src/features/weixin-article/domain/editorial-decision.ts";
+import type { ArticlePlan } from "@src/features/weixin-article/domain/article-plan.ts";
+import type { ArticleQualityReview } from "@src/features/weixin-article/domain/quality-review.ts";
+import type { ArticleRevisionResult } from "@src/features/weixin-article/domain/article-revision.ts";
+import type { EvidencePack } from "@src/features/weixin-article/domain/evidence.ts";
+import type { EditorialMemoryContext } from "@src/core/ports/editorial-memory-store.ts";
+import {
+  evaluateArticleQualityGate,
+  type QualityGateDecision,
+} from "@src/features/weixin-article/services/quality-gate.service.ts";
+import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 
 const logger = new Logger("weixin-article-workflow");
 
@@ -23,7 +37,7 @@ interface WeixinWorkflowEnv {
 }
 
 interface WeixinWorkflowParams {
-  sourceType?: "all" | "firecrawl" | "twitter";
+  sourceType?: ArticleSourceFilter;
   maxArticles?: number;
   forcePublish?: boolean;
   dryRun?: boolean;
@@ -37,6 +51,7 @@ export interface WeixinArticleWorkflowConfig {
   dryRun: boolean;
   profileId?: string;
   runtimeConfigSnapshot?: JsonObject;
+  qualityGate: ResolvedTrendPublishConfig["features"]["article"]["qualityGate"];
 }
 
 interface StepResult<T> {
@@ -72,6 +87,7 @@ export class WeixinArticleWorkflow {
         `[工作流开始] 开始执行微信工作流, 当前工作流实例ID: ${this.env.id} 触发事件ID: ${event.id}, runId: ${runId}`,
       );
       this.dependencies.renderService.setUploadContentImages(!dryRun);
+      this.dependencies.renderService.setGenerateContentImages(!dryRun);
 
       if (this.dependencies.config.runtimeConfigSnapshot) {
         await this.runTrackedStep(
@@ -144,18 +160,37 @@ export class WeixinArticleWorkflow {
           timeout: "10 minutes",
         },
         async () => {
-          const result = await this.dependencies.scrapeService.scrapeAll(
-            sourceLoadResult,
-          );
-          const ref = await artifactStore.putJson(
+          const result = await this.dependencies.scrapeService
+            .scrapeAllDetailed(
+              sourceLoadResult,
+            );
+          const contentsRef = await artifactStore.putJson(
             artifactStore.createRunKey(runId, "02-scraped-contents", "json"),
-            result,
+            result.contents,
             { label: "抓取结果", contentType: "application/json" },
           );
-          return { result: ref, artifacts: [ref] };
+          const healthRef = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "02-source-health", "json"),
+            result.health,
+            { label: "数据源健康", contentType: "application/json" },
+          );
+          await this.dependencies.runtime.editorialMemoryStore
+            .recordSourceHealth(runId, result.health)
+            .catch((error) => {
+              const message = error instanceof Error
+                ? error.message
+                : String(error);
+              logger.warn(`[编辑记忆] 来源表现写入失败: ${message}`);
+            });
+          return { result: contentsRef, artifacts: [contentsRef, healthRef] };
         },
         [sourceLoadRef],
       );
+      const allContentsForGuard = await artifactStore
+        .getJson<ScrapedContent[]>(allContentsRef);
+      if (allContentsForGuard.length === 0) {
+        throw new WorkflowTerminateError("未获取到任何内容，流程终止");
+      }
 
       const uniqueContentsRef = await this.runTrackedStep(
         step,
@@ -181,6 +216,51 @@ export class WeixinArticleWorkflow {
         [allContentsRef],
       );
 
+      const topicReportRef = await this.runTrackedStep(
+        step,
+        runId,
+        "plan-editorial-topics",
+        {
+          retries: { limit: 1, delay: "2 second", backoff: "linear" },
+          timeout: "8 minutes",
+        },
+        async () => {
+          const uniqueContents = await artifactStore
+            .getJson<ScrapedContent[]>(uniqueContentsRef);
+          const memory = await this.dependencies.runtime.editorialMemoryStore
+            .getContext({
+              profileId: this.dependencies.config.profileId,
+              recentLimit: 10,
+              sourceLimit: 25,
+            });
+          const memoryRef = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "04-editorial-memory", "json"),
+            memory,
+            { label: "编辑记忆", contentType: "application/json" },
+          );
+          const result = await this.dependencies.editorialTopicService
+            .createTopicReport(uniqueContents, memory);
+          const reportRef = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "04-editorial-topics", "json"),
+            result,
+            { label: "今日选题", contentType: "application/json" },
+          );
+          const scoresRef = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "05-topic-scores", "json"),
+            result.scores,
+            { label: "选题评分", contentType: "application/json" },
+          );
+          return {
+            result: reportRef,
+            artifacts: [memoryRef, reportRef, scoresRef],
+          };
+        },
+        [uniqueContentsRef],
+      );
+      const topicReport = await artifactStore.getJson<EditorialTopicReport>(
+        topicReportRef,
+      );
+
       const rankedContentsRef = await this.runTrackedStep(
         step,
         runId,
@@ -204,13 +284,53 @@ export class WeixinArticleWorkflow {
           ranked.sort((a, b) => b.score - a.score);
           logger.info("[内容排序] 内容排序完成");
           const ref = await artifactStore.putJson(
-            artifactStore.createRunKey(runId, "04-ranked-contents", "json"),
+            artifactStore.createRunKey(runId, "06-ranked-contents", "json"),
             ranked,
             { label: "排序结果", contentType: "application/json" },
           );
           return { result: ref, artifacts: [ref] };
         },
         [uniqueContentsRef],
+      );
+
+      const editorialDecisionRef = await this.runTrackedStep(
+        step,
+        runId,
+        "decide-editorial-strategy",
+        {
+          retries: { limit: 1, delay: "2 second", backoff: "linear" },
+          timeout: "8 minutes",
+        },
+        async () => {
+          const uniqueContents = await artifactStore
+            .getJson<ScrapedContent[]>(uniqueContentsRef);
+          const memoryObject = await artifactStore.getObject(
+            artifactStore.createRunKey(runId, "04-editorial-memory", "json"),
+          );
+          const memory = memoryObject
+            ? decodeJsonArtifact<EditorialMemoryContext>(memoryObject.body)
+            : undefined;
+          const result = await this.dependencies.editorialDecisionService
+            .createEditorialDecision(
+              topicReport,
+              uniqueContents,
+              memory,
+            );
+          const ref = await artifactStore.putJson(
+            artifactStore.createRunKey(
+              runId,
+              "08-editorial-decision",
+              "json",
+            ),
+            result,
+            { label: "编辑决策", contentType: "application/json" },
+          );
+          return { result: ref, artifacts: [ref] };
+        },
+        [topicReportRef, uniqueContentsRef],
+      );
+      const editorialDecision = await artifactStore.getJson<EditorialDecision>(
+        editorialDecisionRef,
       );
 
       const processedContentsRef = await this.runTrackedStep(
@@ -231,15 +351,85 @@ export class WeixinArticleWorkflow {
               rankedContents,
               uniqueContents,
               event.payload.maxArticles,
+              {
+                topicReport,
+                editorialDecision,
+              },
             );
           const ref = await artifactStore.putJson(
-            artifactStore.createRunKey(runId, "05-processed-contents", "json"),
+            artifactStore.createRunKey(runId, "07-processed-contents", "json"),
             result,
             { label: "处理后文章", contentType: "application/json" },
           );
           return { result: ref, artifacts: [ref] };
         },
-        [rankedContentsRef, uniqueContentsRef],
+        [rankedContentsRef, uniqueContentsRef, editorialDecisionRef],
+      );
+
+      const evidencePackRef = await this.runTrackedStep(
+        step,
+        runId,
+        "research-evidence",
+        {
+          retries: { limit: 1, delay: "2 second", backoff: "linear" },
+          timeout: "10 minutes",
+        },
+        async () => {
+          const processedContents = await artifactStore
+            .getJson<ScrapedContent[]>(processedContentsRef);
+          const result = await this.dependencies.researchService
+            .createEvidencePack({
+              topicReport,
+              editorialDecision,
+              contents: processedContents,
+            });
+          const ref = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "08-evidence-pack", "json"),
+            result,
+            { label: "补充证据包", contentType: "application/json" },
+          );
+          return { result: ref, artifacts: [ref] };
+        },
+        [topicReportRef, editorialDecisionRef, processedContentsRef],
+      );
+      const evidencePack = await artifactStore.getJson<EvidencePack>(
+        evidencePackRef,
+      );
+
+      const articlePlanRef = await this.runTrackedStep(
+        step,
+        runId,
+        "plan-article",
+        {
+          retries: { limit: 1, delay: "2 second", backoff: "linear" },
+          timeout: "8 minutes",
+        },
+        async () => {
+          const processedContents = await artifactStore
+            .getJson<ScrapedContent[]>(processedContentsRef);
+          const result = await this.dependencies.articlePlanService
+            .createArticlePlan(
+              topicReport,
+              processedContents,
+              editorialDecision,
+              evidencePack,
+            );
+          const ref = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "08-article-plan", "json"),
+            result,
+            { label: "文章计划", contentType: "application/json" },
+          );
+          return { result: ref, artifacts: [ref] };
+        },
+        [
+          topicReportRef,
+          processedContentsRef,
+          editorialDecisionRef,
+          evidencePackRef,
+        ],
+      );
+      const articlePlan = await artifactStore.getJson<ArticlePlan>(
+        articlePlanRef,
       );
 
       const templateDataRef = await this.runTrackedStep(
@@ -251,9 +441,10 @@ export class WeixinArticleWorkflow {
             .getJson<ScrapedContent[]>(processedContentsRef);
           const result = this.dependencies.renderService.toTemplateData(
             processedContents,
+            articlePlan,
           );
           const ref = await artifactStore.putJson(
-            artifactStore.createRunKey(runId, "06-template-data", "json"),
+            artifactStore.createRunKey(runId, "09-template-data", "json"),
             result,
             { label: "模板数据", contentType: "application/json" },
           );
@@ -274,9 +465,12 @@ export class WeixinArticleWorkflow {
           const processedContents = await artifactStore
             .getJson<ScrapedContent[]>(processedContentsRef);
           const result = await this.dependencies.titleService
-            .generateSummaryTitle(processedContents);
+            .generateSummaryTitle(processedContents, {
+              articlePlan,
+              editorialDecision,
+            });
           const ref = await artifactStore.putJson(
-            artifactStore.createRunKey(runId, "07-title", "json"),
+            artifactStore.createRunKey(runId, "10-title", "json"),
             { title: result },
             { label: "标题", contentType: "application/json" },
           );
@@ -308,7 +502,7 @@ export class WeixinArticleWorkflow {
               summaryTitle,
             );
           const ref = await artifactStore.putJson(
-            artifactStore.createRunKey(runId, "08-cover", "json"),
+            artifactStore.createRunKey(runId, "11-cover", "json"),
             result,
             { label: "封面", contentType: "application/json" },
           );
@@ -326,17 +520,18 @@ export class WeixinArticleWorkflow {
         runId,
         "render-article-template",
         {
-          retries: { limit: 1, delay: "2 second", backoff: "linear" },
-          timeout: "5 minutes",
+          retries: { limit: 0, delay: "2 second", backoff: "linear" },
+          timeout: "12 minutes",
         },
         async () => {
           const templateData = await artifactStore
             .getJson<WeixinTemplate[]>(templateDataRef);
           const html = await this.dependencies.renderService.render(
             templateData,
+            { articlePlan },
           );
           const ref = await artifactStore.putText(
-            artifactStore.createRunKey(runId, "09-rendered-article", "html"),
+            artifactStore.createRunKey(runId, "12-rendered-article", "html"),
             html,
             {
               label: "微信正文 HTML",
@@ -347,6 +542,175 @@ export class WeixinArticleWorkflow {
         },
         [templateDataRef],
       );
+
+      const qualityReviewRef = await this.runTrackedStep(
+        step,
+        runId,
+        "review-article-quality",
+        {
+          retries: { limit: 1, delay: "2 second", backoff: "linear" },
+          timeout: "8 minutes",
+        },
+        async () => {
+          const renderedTemplate = await artifactStore.getText(
+            renderedTemplateRef,
+          );
+          const processedContents = await artifactStore
+            .getJson<ScrapedContent[]>(processedContentsRef);
+          const result = await this.dependencies.qualityReviewService
+            .reviewArticle({
+              title: summaryTitle,
+              html: renderedTemplate,
+              articlePlan,
+              topicReport,
+              contents: processedContents,
+              evidencePack,
+            });
+          const ref = await artifactStore.putJson(
+            artifactStore.createRunKey(runId, "13-quality-review", "json"),
+            result,
+            { label: "质量审稿", contentType: "application/json" },
+          );
+          return { result: ref, artifacts: [ref] };
+        },
+        [
+          renderedTemplateRef,
+          titleRef,
+          articlePlanRef,
+          topicReportRef,
+          evidencePackRef,
+        ],
+      );
+      const qualityReview = await artifactStore.getJson<ArticleQualityReview>(
+        qualityReviewRef,
+      );
+
+      let finalTitle = summaryTitle;
+      let finalHtmlRef = renderedTemplateRef;
+      let finalReview = qualityReview;
+      let finalReviewRef = qualityReviewRef;
+      let revisionSummary = "未修复";
+
+      const maxRevisionRounds = Math.max(
+        0,
+        Math.min(2, this.dependencies.config.qualityGate.maxRevisionRounds),
+      );
+      if (maxRevisionRounds > 0) {
+        const processedContents = await artifactStore
+          .getJson<ScrapedContent[]>(processedContentsRef);
+        for (let round = 1; round <= maxRevisionRounds; round++) {
+          if (!shouldReviseArticle(finalReview)) break;
+          const revisionRef = await this.runTrackedStep(
+            step,
+            runId,
+            `revise-article-round-${round}`,
+            {
+              retries: { limit: 1, delay: "2 second", backoff: "linear" },
+              timeout: "8 minutes",
+            },
+            async () => {
+              const currentHtml = await artifactStore.getText(finalHtmlRef);
+              const result = await this.dependencies.revisionService
+                .reviseArticle({
+                  round,
+                  title: finalTitle,
+                  html: currentHtml,
+                  articlePlan,
+                  qualityReview: finalReview,
+                  contents: processedContents,
+                });
+              const ref = await artifactStore.putJson(
+                artifactStore.createRunKey(
+                  runId,
+                  `15-revision-round-${round}`,
+                  "json",
+                ),
+                result,
+                { label: `文章修复 ${round}`, contentType: "application/json" },
+              );
+              return { result: ref, artifacts: [ref] };
+            },
+            [finalHtmlRef, finalReviewRef, articlePlanRef],
+          );
+          const revision = await artifactStore.getJson<ArticleRevisionResult>(
+            revisionRef,
+          );
+          if (!revision.applied) {
+            revisionSummary = `第 ${round} 轮未应用`;
+            break;
+          }
+
+          finalTitle = revision.title;
+          finalHtmlRef = await artifactStore.putText(
+            artifactStore.createRunKey(
+              runId,
+              `16-revised-article-round-${round}`,
+              "html",
+            ),
+            revision.html,
+            {
+              label: `修复后 HTML ${round}`,
+              contentType: "text/html; charset=utf-8",
+            },
+          );
+          finalReviewRef = await this.runTrackedStep(
+            step,
+            runId,
+            `review-revised-article-round-${round}`,
+            {
+              retries: { limit: 1, delay: "2 second", backoff: "linear" },
+              timeout: "8 minutes",
+            },
+            async () => {
+              const result = await this.dependencies.qualityReviewService
+                .reviewArticle({
+                  title: finalTitle,
+                  html: revision.html,
+                  articlePlan,
+                  topicReport,
+                  contents: processedContents,
+                  evidencePack,
+                });
+              const ref = await artifactStore.putJson(
+                artifactStore.createRunKey(
+                  runId,
+                  `17-quality-review-round-${round + 1}`,
+                  "json",
+                ),
+                result,
+                {
+                  label: `质量复审 ${round + 1}`,
+                  contentType: "application/json",
+                },
+              );
+              return { result: ref, artifacts: [ref] };
+            },
+            [finalHtmlRef, revisionRef, articlePlanRef, evidencePackRef],
+          );
+          finalReview = await artifactStore.getJson<ArticleQualityReview>(
+            finalReviewRef,
+          );
+          revisionSummary = `第 ${round} 轮修复: ${
+            revision.changedFields.join(", ")
+          }`;
+        }
+      }
+
+      const finalTitleRef = await artifactStore.putJson(
+        artifactStore.createRunKey(runId, "18-final-title", "json"),
+        { title: finalTitle },
+        { label: "最终标题", contentType: "application/json" },
+      );
+      const finalHtmlSnapshotRef = finalHtmlRef === renderedTemplateRef
+        ? renderedTemplateRef
+        : await artifactStore.putText(
+          artifactStore.createRunKey(runId, "19-final-article", "html"),
+          await artifactStore.getText(finalHtmlRef),
+          {
+            label: "最终微信正文 HTML",
+            contentType: "text/html; charset=utf-8",
+          },
+        );
 
       const publishRef = await this.runTrackedStep(
         step,
@@ -359,7 +723,7 @@ export class WeixinArticleWorkflow {
         async () => {
           const publishResultKey = artifactStore.createRunKey(
             runId,
-            "10-publish-result",
+            "14-publish-result",
             "json",
           );
           const existingPublishResult = await artifactStore.getObject(
@@ -374,13 +738,25 @@ export class WeixinArticleWorkflow {
           }
 
           const renderedTemplate = await artifactStore.getText(
-            renderedTemplateRef,
+            finalHtmlSnapshotRef,
           );
           const dryRunPreviewRef = dryRun
             ? await this.dependencies.dryRunOutputService.writeHtml(
               runId,
               renderedTemplate,
             )
+            : undefined;
+          const qualityGateDecision = evaluateArticleQualityGate({
+            review: finalReview,
+            config: this.dependencies.config.qualityGate,
+            dryRun,
+            forcePublish: event.payload.forcePublish,
+          });
+          if (qualityGateDecision.bypassed) {
+            logger.warn(`[发布保护] ${qualityGateDecision.reason}`);
+          }
+          const blockedPublishResult = !qualityGateDecision.allowed
+            ? createBlockedPublishResult(qualityGateDecision)
             : undefined;
           const publishResult = dryRun
             ? {
@@ -390,9 +766,11 @@ export class WeixinArticleWorkflow {
               platform: "weixin",
               url: dryRunPreviewRef?.key,
             }
+            : blockedPublishResult
+            ? blockedPublishResult
             : await this.publishArticle(
               renderedTemplate,
-              summaryTitle,
+              finalTitle,
               mediaId,
             );
           const ref = await artifactStore.putJson(
@@ -405,8 +783,28 @@ export class WeixinArticleWorkflow {
             artifacts: [dryRunPreviewRef, ref].filter(Boolean) as ArtifactRef[],
           };
         },
-        [renderedTemplateRef, titleRef, coverRef],
+        [finalHtmlSnapshotRef, finalTitleRef, coverRef, finalReviewRef],
       );
+      const publishResult = await artifactStore.getJson<PublishResult>(
+        publishRef,
+      );
+      await this.dependencies.runtime.editorialMemoryStore.recordArticle({
+        runId,
+        profileId: this.dependencies.config.profileId,
+        title: finalTitle,
+        thesis: articlePlan.thesis,
+        keywords: extractTopicKeywords(topicReport),
+        topicTitles: topicReport.clusters.map((cluster) => cluster.title),
+        sourceUrls: extractSourceUrls(
+          await artifactStore.getJson<ScrapedContent[]>(processedContentsRef),
+        ),
+        qualityScore: finalReview.overallScore,
+        publishStatus: publishResult.status,
+        dryRun,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[编辑记忆] 文章记忆写入失败: ${message}`);
+      });
 
       const summary = `
         工作流执行完成
@@ -415,8 +813,13 @@ export class WeixinArticleWorkflow {
         - 失败: ${this.dependencies.stats.failed} 个
         - 内容: ${this.dependencies.stats.contents} 条
         - 重复: ${this.dependencies.stats.duplicates} 条
+        - 选题: ${formatTopicSummary(topicReport)}
+        - 编辑决策: ${formatEditorialDecisionSummary(editorialDecision)}
+        - 文章计划: ${formatArticlePlanSummary(articlePlan)}
+        - 修复: ${revisionSummary}
+        - 质量审稿: ${formatQualityReviewSummary(finalReview)}
         - 封面: ${formatCoverSummary(coverResult)}
-        - 发布: ${dryRun ? "DryRun(未发布)" : "成功"}`.trim();
+        - 发布: ${formatPublishSummary(publishResult, dryRun)}`.trim();
 
       await runStateStore.finishRun(runId, {
         summary,
@@ -426,7 +829,9 @@ export class WeixinArticleWorkflow {
 
       logger.info(`[工作流完成] ${summary}`);
 
-      if (this.dependencies.stats.failed > 0) {
+      if (publishResult.status === "blocked") {
+        await this.dependencies.notifier.warning("发布被质量门禁拦截", summary);
+      } else if (this.dependencies.stats.failed > 0) {
         await this.dependencies.notifier.warning(
           "工作流完成(部分失败)",
           summary,
@@ -535,4 +940,76 @@ function formatCoverSummary(result: CoverGenerationResult): string {
     return `使用默认封面${result.error ? `，原因: ${result.error}` : ""}`;
   }
   return "未生成";
+}
+
+function formatTopicSummary(report: EditorialTopicReport): string {
+  const leadCount =
+    report.scores.filter((score) => score.recommendedUse === "lead").length;
+  const fallback = report.fallback ? "，兜底" : "";
+  return `${report.clusters.length} 个主题，${leadCount} 个主线候选${fallback}`;
+}
+
+function formatArticlePlanSummary(plan: ArticlePlan): string {
+  const fallback = plan.fallback ? "，兜底" : "";
+  return `${plan.format}，${plan.sections.length} 个章节${fallback}`;
+}
+
+function formatEditorialDecisionSummary(decision: EditorialDecision): string {
+  const fallback = decision.fallback ? "，兜底" : "";
+  return `${decision.leadTopicTitle}，${decision.recommendedFormat}${fallback}`;
+}
+
+function extractTopicKeywords(report: EditorialTopicReport): string[] {
+  const seen = new Set<string>();
+  for (const cluster of report.clusters) {
+    for (const keyword of cluster.keywords) {
+      const trimmed = keyword.trim();
+      if (trimmed) seen.add(trimmed);
+    }
+  }
+  return [...seen].slice(0, 20);
+}
+
+function extractSourceUrls(contents: ScrapedContent[]): string[] {
+  const seen = new Set<string>();
+  for (const content of contents) {
+    if (content.url) seen.add(content.url);
+  }
+  return [...seen].slice(0, 50);
+}
+
+function formatQualityReviewSummary(review: ArticleQualityReview): string {
+  const fallback = review.fallback ? "，兜底" : "";
+  return `${review.overallScore} 分，${review.recommendedAction}${fallback}`;
+}
+
+function shouldReviseArticle(review: ArticleQualityReview): boolean {
+  if (review.recommendedAction === "publish" && review.overallScore >= 80) {
+    return false;
+  }
+  return review.issues.some((issue) =>
+    issue.autoFixable &&
+    issue.severity !== "blocker" &&
+    !(issue.category === "fact" && issue.severity === "high")
+  );
+}
+
+function createBlockedPublishResult(
+  decision: QualityGateDecision,
+): PublishResult {
+  return {
+    publishId: "blocked",
+    status: "blocked",
+    publishedAt: new Date(),
+    platform: "weixin",
+    reason: decision.reason,
+  };
+}
+
+function formatPublishSummary(result: PublishResult, dryRun: boolean): string {
+  if (dryRun) return "DryRun(未发布)";
+  if (result.status === "blocked") {
+    return `被质量门禁拦截${result.reason ? `: ${result.reason}` : ""}`;
+  }
+  return "成功";
 }

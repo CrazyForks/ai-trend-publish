@@ -29,6 +29,10 @@ export default defineConfig({
       baseUrl: "https://api.deepseek.com/v1",
       apiKey: "",
       model: "deepseek-chat",
+      // 长上下文步骤（动态模板、质量审稿）可能需要更久，默认 300 秒。
+      timeoutMs: 300000,
+      // HTTP 层最大尝试次数。模型慢时优先提高 timeoutMs，而不是堆重试。
+      maxAttempts: 1,
     },
 
     /**
@@ -47,6 +51,21 @@ export default defineConfig({
         xquikApiKey: "",
       },
       jina: {
+        apiKey: "",
+      },
+      brave: {
+        apiKey: "",
+      },
+      tavily: {
+        apiKey: "",
+      },
+      exa: {
+        apiKey: "",
+      },
+      serper: {
+        apiKey: "",
+      },
+      newsapi: {
         apiKey: "",
       },
       rss: {
@@ -133,18 +152,32 @@ export default defineConfig({
    * `sources` 里的数据源可以是普通 URL，也可以带分组前缀：
    * - "https://example.com" 使用 `default` 分组
    * - "web:https://example.com" 使用 `web` 分组
+   * - "search:AI agent news" 使用 `search` 分组做关键词搜索
    *
    * 分组里的 provider 会按顺序 fallback。谁先返回内容，就使用谁的结果。
    * `auto` 会按 URL 自动推断 provider：
    * - x.com / twitter.com -> twitter
    * - RSS / RSSHub / feed URL -> rss
    * - 其他网页 -> firecrawl
+   *
+   * `search` 是关键词发现能力。优先配置低成本搜索 provider；
+   * `gdelt`、`hackernews`、`arxiv` 不需要 API Key，适合免费补充新闻、社区和论文线索。
    */
   fetchGroups: {
     default: ["auto"],
     web: ["firecrawl", "jina"],
     social: ["twitter"],
+    rss: ["rss"],
+    search: ["gdelt", "hackernews", "arxiv"],
+    paidSearch: [
+      "brave-search",
+      "jina-search",
+      "tavily-search",
+      "exa-search",
+      "serper-search",
+    ],
     reliableWeb: ["firecrawl", "jina"],
+    freeResearch: ["gdelt", "hackernews", "arxiv"],
   },
 
   /**
@@ -165,6 +198,13 @@ export default defineConfig({
         "web:https://example.com/ai-news",
         "social:https://x.com/OpenAIDevs",
         "reliableWeb:https://openai.com/news/",
+        "reliableWeb:https://www.anthropic.com/news",
+        "reliableWeb:https://blog.google/technology/ai/",
+        "reliableWeb:https://deepmind.google/discover/blog/",
+        "reliableWeb:https://ai.meta.com/blog/",
+        "search:AI agent research breakthrough latest",
+        "rss:https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+        "rss:https://huggingface.co/blog/feed.xml",
       ],
 
       /**
@@ -258,6 +298,32 @@ export default defineConfig({
         enabled: false,
         embeddingProvider: "dashscope",
         vectorStore: "sqlite",
+      },
+
+      /**
+       * 数据源截断。
+       *
+       * 所有抓取 provider 都统一生效：普通网页、RSS、Twitter 都会先过滤旧内容，
+       * 再限制每个源进入选题/排序的数量，避免历史内容或超大 RSS 源拖垮质量。
+       */
+      sourceLimits: {
+        maxAgeDays: 14,
+        maxItemsPerSource: 20,
+      },
+
+      /**
+       * 发布前质量门禁。
+       *
+       * 第一性原则：不要把低质量文章发出去。
+       * dry-run 永远不会被阻断，方便你观察选题、文章计划、HTML 和审稿结果。
+       * 只有 dryRun=false 的真实发布会被门禁保护。
+       */
+      qualityGate: {
+        enabled: true,
+        minScore: 80,
+        blockOnHighFactIssue: true,
+        allowForcePublish: true,
+        maxRevisionRounds: 1,
       },
     },
   },

@@ -3,7 +3,10 @@ import {
   fetchProviderRegistry,
 } from "@src/integrations/fetch/fetch-provider-registry.ts";
 import { scraperRegistry } from "@src/integrations/fetch/scraper-registry.ts";
-import { ContentScraper } from "@src/core/ports/content-scraper.ts";
+import {
+  ContentScraper,
+  ScrapedContent,
+} from "@src/core/ports/content-scraper.ts";
 import {
   ArticleSource,
 } from "@src/features/weixin-article/domain/article-source.ts";
@@ -12,6 +15,7 @@ import type {
   ArticleContentFetcher,
   ArticleContentFetchFailure,
   ArticleContentFetchResult,
+  ArticleContentHydrationResult,
 } from "@src/features/weixin-article/services/content-scrape.service.ts";
 
 type ArticleFetchProvider = FetchProviderId;
@@ -73,6 +77,75 @@ export class ArticleFetchRouter implements ArticleContentFetcher {
     return { contents: [], failures };
   }
 
+  async hydrate(
+    content: ScrapedContent,
+    onAttemptFailure?: (
+      failure: ArticleContentFetchFailure,
+    ) => Promise<void> | void,
+  ): Promise<ArticleContentHydrationResult> {
+    const originalContentLength = content.content.length;
+    const failures: ArticleContentFetchFailure[] = [];
+
+    if (!isHttpUrl(content.url)) {
+      return {
+        content,
+        hydrated: false,
+        failures: [{
+          provider: "hydrate",
+          message: `跳过非 HTTP URL: ${content.url}`,
+        }],
+        originalContentLength,
+        hydratedContentLength: originalContentLength,
+      };
+    }
+
+    for (const provider of this.getHydrationProviders()) {
+      try {
+        const candidates = await this.getScraper(provider).scrape(content.url, {
+          limit: 1,
+          filters: {
+            mode: "article-detail",
+            originalId: content.id,
+          },
+        });
+        const best = pickBestHydrationCandidate(candidates);
+        if (best && isMeaningfullyRicher(best, content)) {
+          const hydrated = mergeHydratedContent(content, best, provider);
+          return {
+            content: hydrated,
+            hydrated: true,
+            provider,
+            failures,
+            originalContentLength,
+            hydratedContentLength: hydrated.content.length,
+          };
+        }
+
+        const failure = {
+          provider,
+          message: "正文深抓内容未明显优于原始摘要",
+        };
+        failures.push(failure);
+        await onAttemptFailure?.(failure);
+      } catch (error) {
+        const failure = {
+          provider,
+          message: error instanceof Error ? error.message : String(error),
+        };
+        failures.push(failure);
+        await onAttemptFailure?.(failure);
+      }
+    }
+
+    return {
+      content,
+      hydrated: false,
+      failures,
+      originalContentLength,
+      hydratedContentLength: originalContentLength,
+    };
+  }
+
   private getScraper(provider: ArticleFetchProvider): ContentScraper {
     const existing = this.scrapers.get(provider);
     if (existing) {
@@ -84,5 +157,80 @@ export class ArticleFetchRouter implements ArticleContentFetcher {
     ).create({ config: this.config });
     this.scrapers.set(provider, scraper);
     return scraper;
+  }
+
+  private getHydrationProviders(): ArticleFetchProvider[] {
+    const preferred: ArticleFetchProvider[] = ["jina", "firecrawl"];
+    if (!this.config) {
+      return preferred.filter((provider) => this.scrapers.has(provider));
+    }
+
+    return preferred.filter((provider) =>
+      fetchProviderRegistry.get(provider).isConfigured(this.config!)
+    );
+  }
+}
+
+function pickBestHydrationCandidate(
+  candidates: ScrapedContent[],
+): ScrapedContent | undefined {
+  return candidates
+    .filter((candidate) => candidate.content.trim().length > 0)
+    .toSorted((left, right) => right.content.length - left.content.length)[0];
+}
+
+function isMeaningfullyRicher(
+  candidate: ScrapedContent,
+  original: ScrapedContent,
+): boolean {
+  const candidateLength = candidate.content.trim().length;
+  const originalLength = original.content.trim().length;
+  if (candidateLength < 300) return false;
+  return candidateLength >=
+    Math.max(originalLength * 1.5, originalLength + 200);
+}
+
+function mergeHydratedContent(
+  original: ScrapedContent,
+  hydrated: ScrapedContent,
+  provider: ArticleFetchProvider,
+): ScrapedContent {
+  return {
+    ...original,
+    title: hydrated.title?.trim() || original.title,
+    content: hydrated.content,
+    url: hydrated.url || original.url,
+    publishDate: hydrated.publishDate || original.publishDate,
+    media: mergeMedia(original, hydrated),
+    metadata: {
+      ...original.metadata,
+      hydrated: true,
+      hydrationProvider: provider,
+      hydrationOriginalContentLength: original.content.length,
+      hydrationContentLength: hydrated.content.length,
+      hydrationUrl: hydrated.url || original.url,
+    },
+  };
+}
+
+function mergeMedia(
+  original: ScrapedContent,
+  hydrated: ScrapedContent,
+): ScrapedContent["media"] {
+  const media = [...(original.media ?? []), ...(hydrated.media ?? [])];
+  const seen = new Set<string>();
+  return media.filter((item) => {
+    if (seen.has(item.url)) return false;
+    seen.add(item.url);
+    return true;
+  });
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
   }
 }

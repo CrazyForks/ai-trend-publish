@@ -180,8 +180,15 @@ export class KvD1RunStateStore implements RunStateStore {
       record.error ?? null,
       JSON.stringify(record.artifacts ?? []),
     ).run();
-    await this.kv.put(`run:${record.runId}`, JSON.stringify(record));
-    await this.kv.put("runs:latest", JSON.stringify(record));
+    try {
+      await this.kv.put(`run:${record.runId}`, JSON.stringify(record));
+      await this.kv.put("runs:latest", JSON.stringify(record));
+    } catch (error) {
+      console.warn("[cloudflare-run-state] KV cache write skipped", {
+        runId: record.runId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async upsertStep(record: ArticleRunStepRecord): Promise<void> {

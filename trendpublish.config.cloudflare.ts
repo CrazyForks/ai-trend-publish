@@ -1,7 +1,9 @@
 import {
+  ArticleImageProvider,
   ArticleNotificationChannel,
   ArticleTemplateType,
   defineConfig,
+  FetchProviderName,
 } from "@src/utils/config/define-config.ts";
 import { PromptProfileName } from "./src/prompts/prompt-profile.ts";
 
@@ -23,10 +25,45 @@ export default defineConfig((runtime) => {
   ) as ArticleNotificationChannel[];
   const firecrawlApiKey = runtime.secret("FIRECRAWL_API_KEY");
   const jinaApiKey = runtime.secret("JINA_API_KEY");
+  const braveApiKey = runtime.secret("BRAVE_SEARCH_API_KEY");
+  const tavilyApiKey = runtime.secret("TAVILY_API_KEY");
+  const exaApiKey = runtime.secret("EXA_API_KEY");
+  const serperApiKey = runtime.secret("SERPER_API_KEY");
+  const newsapiApiKey = runtime.secret("NEWSAPI_API_KEY");
   const webFetchProviders = [
     firecrawlApiKey ? "firecrawl" : "",
     jinaApiKey ? "jina" : "",
-  ].filter(Boolean) as Array<"firecrawl" | "jina">;
+  ].filter(Boolean) as FetchProviderName[];
+  const paidSearchProviders = [
+    braveApiKey ? "brave-search" : "",
+    jinaApiKey ? "jina-search" : "",
+    tavilyApiKey ? "tavily-search" : "",
+    exaApiKey ? "exa-search" : "",
+    serperApiKey ? "serper-search" : "",
+    newsapiApiKey ? "newsapi" : "",
+  ].filter(Boolean) as FetchProviderName[];
+  const freeResearchProviders = [
+    "gdelt",
+    "hackernews",
+    "arxiv",
+  ] satisfies FetchProviderName[];
+  const coverProvider = runtime.value(
+    "COVER_PROVIDER",
+    "dashscope",
+  ) as ArticleImageProvider;
+  const bodyImagesProvider = runtime.value(
+    "BODY_IMAGES_PROVIDER",
+    "dashscope",
+  ) as ArticleImageProvider;
+  const weixinRelayUrl = runtime.secret("WEIXIN_RELAY_URL");
+  const weixinRelayToken = runtime.secret("WEIXIN_RELAY_TOKEN");
+  const configuredPublishProvider = runtime.value(
+    "WEIXIN_PUBLISH_PROVIDER",
+    "",
+  );
+  const articlePublishProvider = weixinRelayUrl && weixinRelayToken
+    ? "weixin-relay"
+    : (configuredPublishProvider || "weixin") as "weixin" | "weixin-relay";
 
   return {
     server: {
@@ -39,6 +76,8 @@ export default defineConfig((runtime) => {
         baseUrl: runtime.value("AI_BASE_URL", "https://api.deepseek.com/v1"),
         apiKey: runtime.required("AI_API_KEY"),
         model: runtime.value("AI_MODEL", "deepseek-chat"),
+        timeoutMs: Number(runtime.value("AI_TIMEOUT_MS", "300000")),
+        maxAttempts: Number(runtime.value("AI_MAX_ATTEMPTS", "1")),
       },
       fetch: {
         firecrawl: {
@@ -46,6 +85,21 @@ export default defineConfig((runtime) => {
         },
         jina: {
           apiKey: jinaApiKey,
+        },
+        brave: {
+          apiKey: braveApiKey,
+        },
+        tavily: {
+          apiKey: tavilyApiKey,
+        },
+        exa: {
+          apiKey: exaApiKey,
+        },
+        serper: {
+          apiKey: serperApiKey,
+        },
+        newsapi: {
+          apiKey: newsapiApiKey,
         },
         twitter: {
           bearerToken: runtime.secret("TWITTER_BEARER_TOKEN"),
@@ -58,6 +112,10 @@ export default defineConfig((runtime) => {
       image: {
         dashscope: {
           apiKey: runtime.secret("DASHSCOPE_API_KEY"),
+        },
+        minimax: {
+          apiKey: runtime.secret("MINIMAX_API_KEY"),
+          apiHost: runtime.value("MINIMAX_API_HOST", "https://api.minimax.io"),
         },
       },
       publish: {
@@ -75,8 +133,8 @@ export default defineConfig((runtime) => {
           ),
         },
         weixinRelay: {
-          url: runtime.secret("WEIXIN_RELAY_URL"),
-          token: runtime.secret("WEIXIN_RELAY_TOKEN"),
+          url: weixinRelayUrl,
+          token: weixinRelayToken,
         },
       },
       notify: {
@@ -97,6 +155,12 @@ export default defineConfig((runtime) => {
       web: webFetchProviders.length ? webFetchProviders : ["firecrawl"],
       reliableWeb: webFetchProviders.length ? webFetchProviders : ["firecrawl"],
       social: ["twitter"],
+      rss: ["rss"],
+      search: freeResearchProviders,
+      freeResearch: freeResearchProviders,
+      paidSearch: paidSearchProviders.length
+        ? paidSearchProviders
+        : freeResearchProviders,
     },
 
     features: {
@@ -105,10 +169,7 @@ export default defineConfig((runtime) => {
           runtime.value("ARTICLE_SOURCES", "https://news.ycombinator.com/"),
         ),
         publisher: {
-          provider: runtime.value(
-            "WEIXIN_PUBLISH_PROVIDER",
-            "weixin-relay",
-          ) as "weixin" | "weixin-relay",
+          provider: articlePublishProvider,
         },
         renderer: {
           template: runtime.value(
@@ -127,7 +188,7 @@ export default defineConfig((runtime) => {
         },
         cover: {
           enabled: booleanValue(runtime.value("COVER_ENABLED", ""), true),
-          provider: "dashscope",
+          provider: coverProvider,
           model: runtime.value(
             "COVER_MODEL",
             "qwen-image-2.0-pro",
@@ -138,7 +199,8 @@ export default defineConfig((runtime) => {
             | "off"
             | "missing"
             | "all",
-          provider: "dashscope",
+          provider: bodyImagesProvider,
+          model: runtime.value("BODY_IMAGES_MODEL", "qwen-image-2.0"),
           count: Number(runtime.value("BODY_IMAGES_COUNT", "1")),
           size: runtime.value(
             "BODY_IMAGES_SIZE",

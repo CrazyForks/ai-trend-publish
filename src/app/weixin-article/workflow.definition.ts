@@ -13,9 +13,10 @@ import {
   resolveArticleRuntimeConfig,
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import type { ResolvedArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.ts";
+import type { ArticleSourceFilter } from "@src/features/weixin-article/services/content-scrape.service.ts";
 
 export interface WeixinArticleWorkflowInput {
-  sourceType?: "all" | "firecrawl" | "twitter";
+  sourceType?: ArticleSourceFilter;
   maxArticles?: number;
   forcePublish?: boolean;
   dryRun?: boolean;

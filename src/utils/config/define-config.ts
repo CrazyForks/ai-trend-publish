@@ -16,6 +16,15 @@ export type FetchProviderName =
   | "auto"
   | "firecrawl"
   | "jina"
+  | "jina-search"
+  | "brave-search"
+  | "tavily-search"
+  | "exa-search"
+  | "serper-search"
+  | "newsapi"
+  | "gdelt"
+  | "hackernews"
+  | "arxiv"
   | "twitter"
   | "rss";
 
@@ -67,6 +76,10 @@ export interface OpenAICompatibleConfig {
   apiKey?: string;
   /** 当前供应商可用的聊天模型 ID。 */
   model?: string;
+  /** 单次 Chat Completions 请求超时，单位毫秒。长上下文排版/审稿建议 300000 以上。 */
+  timeoutMs?: number;
+  /** HTTP 层最大尝试次数。模型慢时优先提高 timeoutMs，不建议堆太多重试。 */
+  maxAttempts?: number;
 }
 
 /** 内容抓取供应商凭证。只需要填写数据源实际会用到的 provider。 */
@@ -75,8 +88,28 @@ export interface FetchProvidersConfig {
   firecrawl?: {
     apiKey?: string;
   };
-  /** Jina Reader / DeepSearch API Key。常用于网页抓取 fallback 或 Jina 分组。 */
+  /** Jina Reader / Search API Key。常用于网页抓取 fallback、正文深抓或关键词搜索。 */
   jina?: {
+    apiKey?: string;
+  };
+  /** Brave Search API Key。便宜的独立网页搜索，适合 search 分组的第一层候选发现。 */
+  brave?: {
+    apiKey?: string;
+  };
+  /** Tavily API Key。面向 AI Agent 的搜索 API，适合补充研究和 EvidencePack。 */
+  tavily?: {
+    apiKey?: string;
+  };
+  /** Exa API Key。语义搜索和高质量网页发现，适合研究型选题。 */
+  exa?: {
+    apiKey?: string;
+  };
+  /** Serper API Key。Google SERP 兼容搜索，适合需要 Google 结果覆盖时使用。 */
+  serper?: {
+    apiKey?: string;
+  };
+  /** NewsAPI Key。新闻搜索源；免费开发额度通常不适合生产大规模发布。 */
+  newsapi?: {
     apiKey?: string;
   };
   /** Twitter/X 抓取凭证。不同 adapter 会按可用字段选择使用。 */
@@ -255,6 +288,28 @@ export interface ArticleDeduplicationConfig {
   vectorStore?: ArticleVectorStoreProvider;
 }
 
+/** 数据源抓取结果截断配置。所有抓取 provider 都统一生效。 */
+export interface ArticleSourceLimitsConfig {
+  /** 只保留最近多少天的内容。无法解析发布时间的内容会保留，但排序靠后。默认 14。 */
+  maxAgeDays?: number;
+  /** 每个数据源最多保留多少条内容进入后续排序/选题。默认 20。 */
+  maxItemsPerSource?: number;
+}
+
+/** 发布前质量门禁配置。只影响真实发布，不影响 dry-run 产物生成。 */
+export interface ArticleQualityGateConfig {
+  /** 是否启用发布前质量门禁。默认 true；只阻断真实发布，dry-run 不受影响。 */
+  enabled?: boolean;
+  /** 允许真实发布的最低质量分。默认 80。 */
+  minScore?: number;
+  /** 发现高危事实问题时是否阻断真实发布。默认 true。 */
+  blockOnHighFactIssue?: boolean;
+  /** 是否允许 forcePublish 绕过质量门禁。默认 true，但会记录 warning。 */
+  allowForcePublish?: boolean;
+  /** 自动修复轮次上限。0 表示只审稿不修复，默认 1。 */
+  maxRevisionRounds?: number;
+}
+
 /** 微信文章工作流功能配置。 */
 export interface ArticleFeatureConfig {
   /**
@@ -280,6 +335,10 @@ export interface ArticleFeatureConfig {
   bodyImages?: ArticleBodyImagesConfig;
   /** 向量去重配置。 */
   deduplication?: ArticleDeduplicationConfig;
+  /** 数据源抓取后进入选题/排序前的时间窗口和数量截断。 */
+  sourceLimits?: ArticleSourceLimitsConfig;
+  /** 发布前质量门禁。只保护真实发布，dry-run 永远继续产出。 */
+  qualityGate?: ArticleQualityGateConfig;
 }
 
 /** 功能配置。 */
@@ -439,6 +498,21 @@ export interface ResolvedTrendPublishConfig {
       jina: {
         apiKey: string;
       };
+      brave: {
+        apiKey: string;
+      };
+      tavily: {
+        apiKey: string;
+      };
+      exa: {
+        apiKey: string;
+      };
+      serper: {
+        apiKey: string;
+      };
+      newsapi: {
+        apiKey: string;
+      };
       twitter: {
         bearerToken: string;
         xquikApiKey: string;
@@ -516,6 +590,17 @@ export interface ResolvedTrendPublishConfig {
         enabled: boolean;
         embeddingProvider: ArticleEmbeddingProvider;
         vectorStore: ArticleVectorStoreProvider;
+      };
+      sourceLimits: {
+        maxAgeDays: number;
+        maxItemsPerSource: number;
+      };
+      qualityGate: {
+        enabled: boolean;
+        minScore: number;
+        blockOnHighFactIssue: boolean;
+        allowForcePublish: boolean;
+        maxRevisionRounds: number;
       };
     };
   };
@@ -599,6 +684,8 @@ export function resolveTrendPublishConfig(
         baseUrl: config.providers?.ai?.baseUrl ?? "",
         apiKey: config.providers?.ai?.apiKey ?? "",
         model: config.providers?.ai?.model ?? "",
+        timeoutMs: config.providers?.ai?.timeoutMs ?? 300000,
+        maxAttempts: config.providers?.ai?.maxAttempts ?? 1,
       },
       fetch: {
         firecrawl: {
@@ -606,6 +693,21 @@ export function resolveTrendPublishConfig(
         },
         jina: {
           apiKey: config.providers?.fetch?.jina?.apiKey ?? "",
+        },
+        brave: {
+          apiKey: config.providers?.fetch?.brave?.apiKey ?? "",
+        },
+        tavily: {
+          apiKey: config.providers?.fetch?.tavily?.apiKey ?? "",
+        },
+        exa: {
+          apiKey: config.providers?.fetch?.exa?.apiKey ?? "",
+        },
+        serper: {
+          apiKey: config.providers?.fetch?.serper?.apiKey ?? "",
+        },
+        newsapi: {
+          apiKey: config.providers?.fetch?.newsapi?.apiKey ?? "",
         },
         twitter: {
           bearerToken: config.providers?.fetch?.twitter?.bearerToken ?? "",
@@ -657,6 +759,8 @@ export function resolveTrendPublishConfig(
           baseUrl: config.providers?.vector?.embedding?.baseUrl ?? "",
           apiKey: config.providers?.vector?.embedding?.apiKey ?? "",
           model: config.providers?.vector?.embedding?.model ?? "",
+          timeoutMs: config.providers?.vector?.embedding?.timeoutMs ?? 300000,
+          maxAttempts: config.providers?.vector?.embedding?.maxAttempts ?? 1,
         },
       },
     },
@@ -703,6 +807,24 @@ export function resolveTrendPublishConfig(
           embeddingProvider: article.deduplication?.embeddingProvider ??
             "dashscope",
           vectorStore: article.deduplication?.vectorStore ?? "sqlite",
+        },
+        sourceLimits: {
+          maxAgeDays: normalizePositiveInteger(
+            article.sourceLimits?.maxAgeDays,
+            14,
+          ),
+          maxItemsPerSource: normalizePositiveInteger(
+            article.sourceLimits?.maxItemsPerSource,
+            20,
+          ),
+        },
+        qualityGate: {
+          enabled: article.qualityGate?.enabled ?? true,
+          minScore: article.qualityGate?.minScore ?? 80,
+          blockOnHighFactIssue: article.qualityGate?.blockOnHighFactIssue ??
+            true,
+          allowForcePublish: article.qualityGate?.allowForcePublish ?? true,
+          maxRevisionRounds: article.qualityGate?.maxRevisionRounds ?? 1,
         },
       },
     },
@@ -790,6 +912,13 @@ function defaultArticleImageModel(
     case "minimax":
       return "image-01";
   }
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number) {
+  if (!Number.isFinite(value) || value === undefined) {
+    return fallback;
+  }
+  return Math.max(1, Math.floor(value));
 }
 
 function isCompatibleArticleImageModel(

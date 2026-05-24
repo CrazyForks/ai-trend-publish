@@ -9,6 +9,8 @@ Jina AI is utilized to provide advanced functionalities such as:
 
 - **Web Scraping**: Using the Jina Reader API to fetch and parse content from
   web pages.
+- **Keyword Search**: Using Jina Search (`s.jina.ai`) to discover candidate
+  articles from query strings.
 - **Deep Search**: Leveraging the Jina DeepSearch API for comprehensive,
   intelligent search capabilities.
 - **Text Embeddings**: Generating vector embeddings for text using the Jina
@@ -18,7 +20,7 @@ Jina AI is utilized to provide advanced functionalities such as:
 
 ## Prerequisites
 
-All Jina AI components require `providers.fetch.jina.apiKey` in
+Jina Reader, Search and DeepSearch all use `providers.fetch.jina.apiKey` in
 `trendpublish.config.ts`.
 
 ```ts
@@ -46,7 +48,16 @@ You can obtain a free API key from the
 - **Usage**: Can be instantiated via `scraperRegistry` or directly. Implements
   the `ContentScraper` interface.
 
-### 2. Deep Search Scraper (JinaDeepSearch)
+### 2. Keyword Search Scraper (JinaSearch)
+
+- **Class**: `JinaSearchScraper`
+- **Location**: `src/integrations/fetch/providers/jina/jina-search-scraper.ts`
+- **API Used**: Jina Search API (`s.jina.ai`)
+- **Description**: Searches the web from a keyword query and returns candidate
+  `ScrapedContent` items. Article sources can use `search:your query` with a
+  `fetchGroups.search = ["jina-search"]` route.
+
+### 3. Deep Search Scraper (JinaDeepSearch)
 
 - **Class**: `JinaDeepSearchScraper`
 - **Location**:
@@ -57,7 +68,7 @@ You can obtain a free API key from the
 - **Usage**: Can be instantiated via `scraperRegistry` or directly. Implements
   the `ContentScraper` interface.
 
-### 3. Embedding Provider (JinaEmbeddings)
+### 4. Embedding Provider (JinaEmbeddings)
 
 - **Class**: `JinaEmbeddingProvider`
 - **Location**:
@@ -69,7 +80,7 @@ You can obtain a free API key from the
   Implements the `EmbeddingProvider` interface. Different Jina embedding models
   can be specified.
 
-### 4. Reranker Provider (JinaReranker)
+### 5. Reranker Provider (JinaReranker)
 
 - **Class**: `JinaRerankerProvider`
 - **Location**:

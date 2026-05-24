@@ -4,6 +4,7 @@ import {
   cleanLLMText,
   cleanLLMTitle,
   normalizeLLMResponse,
+  parseLLMJson,
   stripMarkdownFence,
   stripThinkTags,
 } from "./llm-output.ts";
@@ -25,6 +26,38 @@ Deno.test("cleanLLMJsonText extracts JSON after reasoning and prose", () => {
 `);
 
   assertEquals(result, '{"title":"标题","content":"正文"}');
+});
+
+Deno.test("parseLLMJson repairs common structured output issues", () => {
+  const parsed = parseLLMJson<{
+    title: string;
+    summary: string;
+    items: string[];
+  }>(`
+Let me analyze the sources first.
+\`\`\`json
+{
+  "title": "标题",
+  "summary": "第一行
+第二行",
+  "items": ["a", "b",],
+}
+`);
+
+  assertEquals(parsed, {
+    title: "标题",
+    summary: "第一行\n第二行",
+    items: ["a", "b"],
+  });
+});
+
+Deno.test("parseLLMJson can close lightly truncated JSON fragments", () => {
+  const parsed = parseLLMJson<{ clusters: Array<{ id: string }> }>(`
+<think>分析一下</think>
+{"clusters":[{"id":"topic-1"}
+`);
+
+  assertEquals(parsed, { clusters: [{ id: "topic-1" }] });
 });
 
 Deno.test("cleanLLMText strips think tags, fences and wrapping quotes", () => {

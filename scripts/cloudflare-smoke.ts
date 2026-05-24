@@ -9,6 +9,8 @@ interface SmokeArgs {
   timeoutMs: number;
   intervalMs: number;
   maxArticles?: number;
+  dryRun: boolean;
+  forcePublish: boolean;
 }
 
 interface RunResponse {
@@ -49,7 +51,8 @@ async function runSmoke(options: SmokeArgs): Promise<void> {
     method: "POST",
     apiKey: options.apiKey,
     body: {
-      dryRun: true,
+      dryRun: options.dryRun,
+      forcePublish: options.forcePublish,
       trigger: "manual",
       maxArticles: options.maxArticles,
     },
@@ -57,7 +60,9 @@ async function runSmoke(options: SmokeArgs): Promise<void> {
   if (!run.runId) {
     throw new Error(run.error ?? "Cloudflare run was not created");
   }
-  console.log(`Created dry-run workflow: ${run.runId}`);
+  console.log(
+    `Created ${options.dryRun ? "dry-run" : "publish"} workflow: ${run.runId}`,
+  );
 
   const deadline = Date.now() + options.timeoutMs;
   while (Date.now() < deadline) {
@@ -79,7 +84,11 @@ async function runSmoke(options: SmokeArgs): Promise<void> {
     );
 
     if (record.status === "succeeded") {
-      console.log("Cloudflare workflow dry-run succeeded");
+      console.log(
+        options.dryRun
+          ? "Cloudflare workflow dry-run succeeded"
+          : "Cloudflare workflow publish succeeded",
+      );
       if (record.artifacts?.length) {
         console.log("Artifacts:");
         for (const artifact of record.artifacts) {
@@ -188,6 +197,8 @@ async function parseSmokeArgs(
     maxArticles: values.has("max-articles")
       ? Number(values.get("max-articles"))
       : 1,
+    dryRun: !values.has("publish"),
+    forcePublish: values.has("force-publish"),
   };
 }
 

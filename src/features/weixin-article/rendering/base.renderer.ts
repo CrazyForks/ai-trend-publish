@@ -60,7 +60,11 @@ export abstract class BaseTemplateRenderer<T extends ejs.Data> {
     return this.availableTemplates[randomIndex];
   }
 
-  protected abstract doRender(data: T, template: string): Promise<string>;
+  protected abstract doRender(
+    data: T,
+    template: string,
+    context?: unknown,
+  ): Promise<string>;
 
   /**
    * 渲染模板
@@ -71,6 +75,7 @@ export abstract class BaseTemplateRenderer<T extends ejs.Data> {
   public async render(
     data: T,
     templateType?: string,
+    context?: unknown,
   ): Promise<string> {
     try {
       let finalTemplateType: string;
@@ -101,7 +106,7 @@ export abstract class BaseTemplateRenderer<T extends ejs.Data> {
       }
 
       // 使用 EJS 渲染模板
-      return await this.doRender(data, template);
+      return await this.doRender(data, template, context);
     } catch (error) {
       logger.error("模板渲染失败:", error);
       throw error;

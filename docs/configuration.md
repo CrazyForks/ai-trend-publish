@@ -116,24 +116,25 @@ features: {
 
 ## 功能开关与必需配置
 
-| 想开启的功能            | TS 配置位置                                                                                 | 说明                                               |
-| ----------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 启动 JSON-RPC 服务      | `server.apiKey`                                                                             | API 请求需带 `Authorization: Bearer <key>`         |
-| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                            | 使用 OpenAI Chat Completions 兼容接口              |
-| 本地模板预览            | `features.article.renderer.template`                                                        | 静态模板不依赖公众号配置                           |
-| 提示词风格              | `features.article.renderer.promptProfile`                                                   | 控制排序、摘要、标题、动态排版和配图口径           |
-| 微信文章 dry-run        | `features.article.dryRun: true`                                                             | 不发布，本地输出 HTML，Cloudflare 输出 R2 artifact |
-| 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin` 或 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay      |
-| 文章数据源              | `features.article.sources`                                                                  | URL 列表，可用抓取分组前缀                         |
-| 抓取供应商              | `providers.fetch.*`                                                                         | FireCrawl、Twitter/X、Xquik、Jina、RSS             |
-| 封面生图                | `features.article.cover`, `providers.image.dashscope/minimax.apiKey`                        | 支持阿里云图片生成和 MiniMax，失败时使用兜底封面   |
-| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope/minimax.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片         |
-| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`        | 本地/Docker 用 SQLite，Cloudflare 用 D1            |
-| 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                     | 本地写文件，Cloudflare 使用 R2/KV/D1               |
-| 日志观测                | `observability`                                                                             | 镜像所有 Logger 输出到 stdout 或 HTTP ingest       |
-| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                          | channels 中包含 `bark` 时检查 Bark URL             |
-| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                      | channels 中包含 `dingtalk` 时检查 webhook          |
-| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                        | channels 中包含 `feishu` 时检查 webhook            |
+| 想开启的功能            | TS 配置位置                                                                                 | 说明                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 启动 JSON-RPC 服务      | `server.apiKey`                                                                             | API 请求需带 `Authorization: Bearer <key>`                                                           |
+| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                            | 使用 OpenAI Chat Completions 兼容接口                                                                |
+| 本地模板预览            | `features.article.renderer.template`                                                        | 静态模板不依赖公众号配置                                                                             |
+| 提示词风格              | `features.article.renderer.promptProfile`                                                   | 控制排序、摘要、标题、动态排版和配图口径                                                             |
+| 微信文章 dry-run        | `features.article.dryRun: true`                                                             | 不发布，本地输出 HTML，Cloudflare 输出 R2 artifact                                                   |
+| 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin` 或 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay                                                        |
+| 文章数据源              | `features.article.sources`                                                                  | URL 列表，可用抓取分组前缀                                                                           |
+| 抓取供应商              | `providers.fetch.*`                                                                         | FireCrawl、Twitter/X、Xquik、Jina、Brave、Tavily、Exa、Serper、NewsAPI、RSS；GDELT/HN/arXiv 无需 Key |
+| 封面生图                | `features.article.cover`, `providers.image.dashscope/minimax.apiKey`                        | 支持阿里云图片生成和 MiniMax，失败时使用兜底封面                                                     |
+| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope/minimax.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片                                                           |
+| 发布前质量门禁          | `features.article.qualityGate`                                                              | 只保护真实发布，dry-run 永远继续产出                                                                 |
+| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`        | 本地/Docker 用 SQLite，Cloudflare 用 D1                                                              |
+| 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                     | 本地写文件，Cloudflare 使用 R2/KV/D1                                                                 |
+| 日志观测                | `observability`                                                                             | 镜像所有 Logger 输出到 stdout 或 HTTP ingest                                                         |
+| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                          | channels 中包含 `bark` 时检查 Bark URL                                                               |
+| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                      | channels 中包含 `dingtalk` 时检查 webhook                                                            |
+| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                        | channels 中包含 `feishu` 时检查 webhook                                                              |
 
 ## 运行产物与看板存储
 
@@ -236,12 +237,19 @@ providers: {
     firecrawl: { apiKey: "your_firecrawl_key" },
     twitter: { xquikApiKey: "your_xquik_key" },
     jina: { apiKey: "your_jina_key" },
+    brave: { apiKey: "your_brave_key" },
+    tavily: { apiKey: "your_tavily_key" },
+    exa: { apiKey: "your_exa_key" },
+    serper: { apiKey: "your_serper_key" },
+    newsapi: { apiKey: "your_newsapi_key" },
   },
 },
 fetchGroups: {
   default: ["auto"],
   web: ["firecrawl", "jina"],
   social: ["twitter"],
+  search: ["gdelt", "hackernews", "arxiv"],
+  paidSearch: ["brave-search", "jina-search", "tavily-search", "exa-search", "serper-search"],
 },
 features: {
   article: {
@@ -254,14 +262,19 @@ features: {
       "https://news.ycombinator.com/",
       "web:https://openai.com/news/",
       "social:https://x.com/OpenAIDevs",
+      "search:AI agent research breakthrough latest",
     ],
   },
 },
 ```
 
 无前缀 URL 使用 `fetchGroups.default`；`web:`、`social:` 是自定义抓取分组名。
-分组内 provider 按顺序 fallback，成功一个就停止。`auto` 会按 URL 推断：
-Twitter/X 域名走 Twitter，RSS/RSSHub 走 RSS，其余网页走 FireCrawl。
+`search:` 是关键词搜索源，可以路由到 `jina-search`、`brave-search`、
+`tavily-search`、`exa-search`、`serper-search`、`newsapi`、`gdelt`、
+`hackernews`、`arxiv`。分组内 provider 按顺序 fallback，成功一个就停止。 `auto`
+会按 URL 推断：Twitter/X 域名走 Twitter，RSS/RSSHub 走 RSS，其余网页走
+FireCrawl；query 源默认推断到 Jina Search。`gdelt`、`hackernews`、`arxiv` 不需要
+API Key，适合免费补充新闻、技术社区和论文线索。
 
 运行：
 
@@ -394,7 +407,30 @@ SQLite 也需要建表，但你不需要手工执行。Local/Docker 首次使用
 `migrations/0001_article_workflow_state.sql`，通过 `deno task cf migrate`
 应用到远端，或通过 `deno task cf migrate:local` 应用到本地 Wrangler dev 数据库。
 
-### 7. 开启工作流通知
+### 7. 开启发布前质量门禁
+
+```ts
+features: {
+  article: {
+    qualityGate: {
+      enabled: true,
+      minScore: 80,
+      blockOnHighFactIssue: true,
+      allowForcePublish: true,
+      maxRevisionRounds: 1,
+    },
+  },
+},
+```
+
+质量门禁默认开启，并且只保护真实发布。`dryRun: true` 时仍会完整产出
+HTML、文章计划和质量审稿 artifact，方便先观察质量；`dryRun: false`
+时，如果审稿分低于 `minScore`、审稿建议不是 `publish`、存在 blocker
+或高危事实问题，会写入 `blocked` 发布结果，不会创建微信草稿。
+`maxRevisionRounds` 控制自动修复轮次，建议保持 `1`：只修 reviewer
+指出的可安全自动修复问题，修完会复审一次，再决定最终发布结果。
+
+### 8. 开启工作流通知
 
 ```ts
 providers: {
@@ -416,7 +452,7 @@ features: {
 通知是否启用只看 `features.article.notifications.channels`；`providers.notify.*`
 只保存对应渠道的凭证。
 
-### 8. 接入日志观测
+### 9. 接入日志观测
 
 项目里的日志仍然使用原来的 `new Logger("name").info/warn/error/debug` 写法。
 配置 `observability` 后，这些日志会被额外镜像成结构化事件，可送到 stdout 或 HTTP

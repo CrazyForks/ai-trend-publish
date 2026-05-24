@@ -58,8 +58,8 @@ export class WorkflowStep {
     try {
       // 转换为RetryUtil的选项格式
       const retryOptions: RetryOptions = {
-        maxRetries: options.retries?.limit || 3,
-        baseDelay: this.parseDelay(options.retries?.delay || "1 second"),
+        maxRetries: options.retries?.limit ?? 3,
+        baseDelay: this.parseDelay(options.retries?.delay ?? "1 second"),
         useExponentialBackoff: options.retries?.backoff === "exponential",
       };
 

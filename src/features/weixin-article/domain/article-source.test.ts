@@ -6,6 +6,7 @@ Deno.test("parseSourceInput uses default group for plain URL", () => {
     raw: "https://news.ycombinator.com/",
     group: "default",
     url: "https://news.ycombinator.com/",
+    kind: "url",
   });
 });
 
@@ -14,6 +15,22 @@ Deno.test("parseSourceInput parses custom fetch group prefix", () => {
     raw: "web:https://example.com/ai-news",
     group: "web",
     url: "https://example.com/ai-news",
+    kind: "url",
+  });
+});
+
+Deno.test("parseSourceInput parses search query source", () => {
+  assertEquals(parseSourceInput("search:AI agent research news"), {
+    raw: "search:AI agent research news",
+    group: "search",
+    url: "AI agent research news",
+    kind: "query",
+  });
+  assertEquals(parseSourceInput("research:query:AI model evaluation"), {
+    raw: "research:query:AI model evaluation",
+    group: "research",
+    url: "AI model evaluation",
+    kind: "query",
   });
 });
 
@@ -29,13 +46,30 @@ Deno.test("parseArticleSources dedupes by group and normalized URL", () => {
         raw: "https://example.com",
         group: "default",
         url: "https://example.com/",
+        kind: "url",
       },
       {
         raw: "web:https://example.com/",
         group: "web",
         url: "https://example.com/",
+        kind: "url",
       },
     ],
+  );
+});
+
+Deno.test("parseArticleSources dedupes query sources by normalized text", () => {
+  assertEquals(
+    parseArticleSources([
+      "search:AI   agent news",
+      "search:AI agent news",
+    ]),
+    [{
+      raw: "search:AI   agent news",
+      group: "search",
+      url: "AI agent news",
+      kind: "query",
+    }],
   );
 });
 
