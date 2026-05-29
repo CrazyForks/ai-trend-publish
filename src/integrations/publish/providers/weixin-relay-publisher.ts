@@ -4,7 +4,11 @@ import {
   PublishArticleRequest,
   PublishResult,
 } from "@src/core/ports/content-publisher.ts";
-import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import {
+  type ResolvedTrendPublishConfig,
+  type ResolvedWeixinPublishAccountConfig,
+  resolveWeixinPublishAccount,
+} from "@src/utils/config/define-config.ts";
 import { ProviderError } from "@src/core/errors/provider-error.ts";
 import { redactSensitiveText } from "@src/utils/security/redact.ts";
 import { HttpClient, HttpError } from "@src/utils/http/http-client.ts";
@@ -12,6 +16,13 @@ import { HttpClient, HttpError } from "@src/utils/http/http-client.ts";
 type WeixinRelayConfig = ResolvedTrendPublishConfig["providers"]["publish"][
   "weixinRelay"
 ];
+type WeixinProviderConfig = ResolvedTrendPublishConfig["providers"]["publish"][
+  "weixin"
+];
+
+interface RelayAccountPayload extends ResolvedWeixinPublishAccountConfig {
+  accountId: string;
+}
 
 interface RelayResponse<T> {
   success?: boolean;
@@ -22,7 +33,9 @@ interface RelayResponse<T> {
 export class WeixinRelayPublisher
   implements ContentPublisher, ContentImageUploader {
   constructor(
-    private readonly config: WeixinRelayConfig,
+    private readonly relayConfig: WeixinRelayConfig,
+    private readonly weixinConfig: WeixinProviderConfig,
+    private readonly accountId?: string,
     private readonly httpClient = HttpClient.getInstance(),
   ) {}
 
@@ -68,11 +81,11 @@ export class WeixinRelayPublisher
   }
 
   private async request<T>(path: string, body: unknown): Promise<T> {
-    const baseUrl = this.config.url.replace(/\/+$/, "");
+    const baseUrl = this.relayConfig.url.replace(/\/+$/, "");
     if (!baseUrl) {
       throw new Error("providers.publish.weixinRelay.url is not configured");
     }
-    if (!this.config.token) {
+    if (!this.relayConfig.token) {
       throw new Error("providers.publish.weixinRelay.token is not configured");
     }
 
@@ -83,10 +96,13 @@ export class WeixinRelayPublisher
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${this.config.token}`,
+            "Authorization": `Bearer ${this.relayConfig.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            account: this.resolveRelayAccount(),
+            payload: body,
+          }),
           retries: 1,
           timeout: 30000,
         },
@@ -123,6 +139,29 @@ export class WeixinRelayPublisher
       });
     }
     return json.data;
+  }
+
+  private resolveRelayAccount(): RelayAccountPayload {
+    const selected = resolveWeixinPublishAccount(
+      this.weixinConfig,
+      this.accountId,
+    );
+    if (!selected) {
+      const requested = this.accountId?.trim();
+      throw new Error(
+        requested
+          ? `未找到或未配置微信公众号账号: ${requested}`
+          : "未配置默认微信公众号账号；多公众号配置时请设置 publisher.accountId",
+      );
+    }
+    return {
+      accountId: selected.accountId,
+      appId: selected.account.appId,
+      appSecret: selected.account.appSecret,
+      author: selected.account.author,
+      needOpenComment: selected.account.needOpenComment,
+      onlyFansCanComment: selected.account.onlyFansCanComment,
+    };
   }
 }
 

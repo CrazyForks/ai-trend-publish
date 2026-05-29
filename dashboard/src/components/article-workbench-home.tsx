@@ -50,6 +50,7 @@ interface ConfigSummary {
     };
     publisher: {
       provider: string;
+      accountId?: string;
     };
     cover: {
       enabled: boolean;
@@ -250,7 +251,11 @@ export function ArticleWorkbenchHome(
           title="外部能力"
           value={providerTotal ? `${readyProviders}/${providerTotal}` : "-"}
           detail={config?.article.publisher.provider
-            ? `发布: ${config.article.publisher.provider}`
+            ? `发布: ${config.article.publisher.provider}${
+              config.article.publisher.accountId
+                ? ` · ${config.article.publisher.accountId}`
+                : ""
+            }`
             : "连接状态待检测"}
           icon={<Layers3 className="size-4" />}
           tone={providerTotal && readyProviders === providerTotal
@@ -364,7 +369,9 @@ export function ArticleWorkbenchHome(
             <div className="mt-3 grid gap-2">
               <SetupLine
                 label="发布方式"
-                value={config?.article.publisher.provider ?? "-"}
+                value={config?.article.publisher.accountId
+                  ? `${config.article.publisher.provider} · ${config.article.publisher.accountId}`
+                  : config?.article.publisher.provider ?? "-"}
               />
               <SetupLine
                 label="封面"

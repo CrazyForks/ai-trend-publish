@@ -24,6 +24,9 @@ export interface WeixinArticleWorkflowInput {
   runId?: string;
   trigger?: "manual" | "cron";
   profileId?: string;
+  accountId?: string;
+  runKind?: "single" | "matrix-parent" | "matrix-child";
+  parentRunId?: string;
 }
 
 export const WEIXIN_ARTICLE_WORKFLOW_ID = "weixin-article-workflow";
@@ -64,6 +67,7 @@ export function createWeixinArticleWorkflowDefinition(
           await options.runtimeConfigStoreFactory(baseConfig, event),
           baseConfig,
           event.payload.profileId,
+          event.payload.accountId,
         )
         : undefined;
       const config = runtimeConfig?.config ?? baseConfig;
@@ -71,6 +75,8 @@ export function createWeixinArticleWorkflowDefinition(
         ? await options.dependencyFactory(config, event, runtimeConfig)
         : await createWeixinArticleDependencies(config, {
           profileId: runtimeConfig?.profile.id,
+          accountId: runtimeConfig?.account?.id ?? event.payload.accountId,
+          accountBrand: runtimeConfig?.account?.brand,
           runtimeConfigSnapshot: runtimeConfig?.snapshot,
         });
       const workflow = new WeixinArticleWorkflow({

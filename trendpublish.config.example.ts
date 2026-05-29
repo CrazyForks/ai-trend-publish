@@ -103,10 +103,32 @@ export default defineConfig({
         author: "AI Trend Publish",
         needOpenComment: true,
         onlyFansCanComment: false,
+        /**
+         * 多公众号矩阵预留。
+         *
+         * 单公众号可以只填上面的 appId/appSecret。
+         * 多公众号时在这里配置多个账号，再在
+         * features.article.publisher.accountId 里选择本次发布目标。
+         */
+        accounts: {
+          // main: {
+          //   appId: "",
+          //   appSecret: "",
+          //   author: "AI Trend Publish",
+          // },
+          // lab: {
+          //   appId: "",
+          //   appSecret: "",
+          //   author: "AI Lab",
+          // },
+        },
       },
       /**
        * Cloudflare Worker 没有固定出口 IP。真实发布建议让 Cloudflare 调用
-       * 固定 IP 机器上的 weixin-relay，由 relay 保存微信 appId/appSecret。
+       * 固定 IP 机器上的 weixin-relay。
+       *
+       * relay 只保存自己的 API key，不保存公众号凭证；主服务会把本次发布
+       * 选择的微信 appId/appSecret 随请求透传给 relay。
        */
       weixinRelay: {
         url: "",
@@ -215,6 +237,8 @@ export default defineConfig({
        */
       publisher: {
         provider: "weixin",
+        // 多公众号发布目标。默认账号留空；使用 accounts 时填写 "main"、"lab" 等 accountId。
+        accountId: "",
       },
 
       /**

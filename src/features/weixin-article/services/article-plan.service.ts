@@ -1,5 +1,6 @@
 import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
 import type { LLMProvider } from "@src/core/ports/llm.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 import {
   ArticleBodyImagePlan,
   ArticleCoverDirection,
@@ -39,6 +40,7 @@ export class WeixinArticlePlanService {
   constructor(
     private readonly llm: LLMProvider,
     private readonly promptProfile?: PromptProfileName,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   async createArticlePlan(
@@ -60,7 +62,10 @@ export class WeixinArticlePlanService {
       const messages = [
         {
           role: "system" as const,
-          content: getArticlePlanSystemPrompt(this.promptProfile),
+          content: getArticlePlanSystemPrompt(
+            this.promptProfile,
+            this.accountBrand,
+          ),
         },
         {
           role: "user" as const,
@@ -70,6 +75,7 @@ export class WeixinArticlePlanService {
             this.promptProfile,
             decision,
             evidencePack,
+            this.accountBrand,
           ),
         },
       ];

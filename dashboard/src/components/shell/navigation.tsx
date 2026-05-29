@@ -4,6 +4,7 @@ import {
   Globe2,
   Home,
   Layers3,
+  Network,
   Settings,
   ShieldCheck,
   Workflow,
@@ -63,6 +64,12 @@ function navItems(config: NavConfig, latestRun: NavRun) {
       label: "文章方案",
       meta: "模板与配图",
       icon: <Workflow className="size-4" />,
+    },
+    {
+      view: "accounts" as const,
+      label: "账号矩阵",
+      meta: "风格与定位",
+      icon: <Network className="size-4" />,
     },
     {
       view: "sources" as const,
@@ -161,7 +168,7 @@ export function Sidebar(
   const items = navItems(config, latestRun);
 
   return (
-    <aside className="tp-sidebar sticky top-0 hidden h-screen flex-col border-r px-3 py-4 lg:flex">
+    <aside className="tp-sidebar flex h-full flex-col px-3 py-4">
       <div className="flex items-center gap-3 rounded-md border border-[#e2e8f0] bg-white p-2.5">
         <div className="tp-icon-tile grid size-9 place-items-center rounded-md">
           <Layers3 className="size-4" />

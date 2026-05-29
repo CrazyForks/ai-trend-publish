@@ -1,6 +1,10 @@
 export const ARTICLE_WORKFLOW_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS article_runs (
   run_id TEXT PRIMARY KEY,
+  run_kind TEXT NOT NULL DEFAULT 'single',
+  parent_run_id TEXT,
+  account_id TEXT,
+  profile_id TEXT,
   mode TEXT NOT NULL,
   status TEXT NOT NULL,
   dry_run INTEGER NOT NULL,
@@ -12,6 +16,10 @@ CREATE TABLE IF NOT EXISTS article_runs (
   error TEXT,
   artifacts_json TEXT NOT NULL DEFAULT '[]'
 );
+CREATE INDEX IF NOT EXISTS idx_article_runs_parent
+  ON article_runs(parent_run_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_article_runs_account
+  ON article_runs(account_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS article_run_steps (
   run_id TEXT NOT NULL,
   name TEXT NOT NULL,

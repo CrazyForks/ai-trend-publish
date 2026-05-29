@@ -8,18 +8,23 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export function getArticlePlanSystemPrompt(
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `你是中文内容产品的资深主编。你需要在正文生成前，根据今日选题和已处理文章生成一份结构化 Article Plan。
 
 目标读者：
 - ${profile.audience}
 
 当前内容定位：${profile.label}
+${brandGuide}
 
 编辑口径：
 - ${profile.editorialTone}
@@ -97,9 +102,11 @@ export function getArticlePlanUserPrompt(
   promptProfile?: PromptProfileName,
   decision?: EditorialDecision,
   evidencePack?: EvidencePack,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   const compactTopics = topics.clusters.map((cluster) => {
     const score = topics.scores.find((item) => item.topicId === cluster.id);
     return {
@@ -137,6 +144,7 @@ export function getArticlePlanUserPrompt(
 目标读者：${profile.audience}
 成文角度：
 ${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
+${brandGuide}
 
 ${newsroomStyle}
 

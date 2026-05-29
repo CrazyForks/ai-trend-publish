@@ -119,7 +119,7 @@ export class WeixinArticleCloudflareWorkflow
   extends CloudflareWorkflowEntrypoint {
   private readonly definition: WorkflowDefinition<WeixinArticleWorkflowInput> =
     createWeixinArticleWorkflowDefinition({
-      dependencyFactory: async (config, _event, runtimeConfig) => {
+      dependencyFactory: async (config, event, runtimeConfig) => {
         return await createWeixinArticleDependencies(config, {
           artifactStore: createCloudflareArtifactStore(this.env),
           runStateStore: new KvD1RunStateStore(
@@ -133,6 +133,8 @@ export class WeixinArticleCloudflareWorkflow
             new D1VectorStore(this.env.ARTICLE_DB),
           mode: "cloudflare-workflow",
           profileId: runtimeConfig?.profile.id,
+          accountId: runtimeConfig?.account?.id ?? event.payload.accountId,
+          accountBrand: runtimeConfig?.account?.brand,
           runtimeConfigSnapshot: runtimeConfig?.snapshot,
         });
       },
@@ -367,6 +369,73 @@ async function handleRunsRequest(
   if (unauthorized) return unauthorized;
 
   const stores = createStores(env);
+  if (request.method === "POST" && pathname === "/api/runs/matrix") {
+    const payload = await request.json().catch(() => ({})) as {
+      accountIds?: string[];
+      profileId?: string;
+      dryRun?: boolean;
+      sourceType?: WeixinArticleWorkflowInput["sourceType"];
+      maxArticles?: number;
+    };
+    if (payload.dryRun === false) {
+      return Response.json(
+        { error: "矩阵运行第一版只允许 dry-run" },
+        { status: 400 },
+      );
+    }
+    const accountIds = [...new Set(payload.accountIds ?? [])]
+      .filter((id) => typeof id === "string" && id.trim())
+      .map((id) => id.trim());
+    if (accountIds.length === 0) {
+      return Response.json(
+        { error: "请选择至少一个公众号账号" },
+        { status: 400 },
+      );
+    }
+    const matrixRunId = `matrix-${crypto.randomUUID()}`;
+    await stores.runStateStore.startRun({
+      runId: matrixRunId,
+      runKind: "matrix-parent",
+      mode: "cloudflare-workflow",
+      dryRun: true,
+      trigger: "manual",
+      profileId: payload.profileId,
+    });
+    await stores.runStateStore.updateRun(matrixRunId, {
+      status: "queued",
+      summary: `矩阵 dry-run 已创建：${accountIds.length} 个账号`,
+    });
+    const childRunIds: string[] = [];
+    for (const accountId of accountIds) {
+      const runId = `${matrixRunId}-${accountId}`;
+      childRunIds.push(runId);
+      await stores.runStateStore.startRun({
+        runId,
+        runKind: "matrix-child",
+        parentRunId: matrixRunId,
+        accountId,
+        profileId: payload.profileId,
+        mode: "cloudflare-workflow",
+        dryRun: true,
+        trigger: "manual",
+      });
+      await stores.runStateStore.updateRun(runId, { status: "queued" });
+      await env.WEIXIN_ARTICLE_WORKFLOW.create({
+        id: `${WEIXIN_ARTICLE_WORKFLOW_ID}-${runId}`,
+        params: {
+          ...payload,
+          dryRun: true,
+          accountId,
+          runId,
+          runKind: "matrix-child",
+          parentRunId: matrixRunId,
+          trigger: "manual",
+        },
+      });
+    }
+    return Response.json({ success: true, matrixRunId, childRunIds });
+  }
+
   if (request.method === "POST" && pathname === "/api/runs") {
     const payload = await request.json().catch(
       () => ({}),
@@ -374,6 +443,8 @@ async function handleRunsRequest(
     const runId = payload.runId ?? `cf-${crypto.randomUUID()}`;
     await stores.runStateStore.startRun({
       runId,
+      accountId: payload.accountId,
+      profileId: payload.profileId,
       mode: "cloudflare-workflow",
       dryRun: Boolean(payload.dryRun),
       trigger: payload.trigger ?? "manual",
@@ -570,9 +641,16 @@ function createCloudflarePublisher(
 ): ContentPublisher {
   switch (config.features.article.publisher.provider) {
     case "weixin":
-      return new WeixinPublisher(config.providers.publish.weixin);
+      return new WeixinPublisher(
+        config.providers.publish.weixin,
+        config.features.article.publisher.accountId,
+      );
     case "weixin-relay":
-      return new WeixinRelayPublisher(config.providers.publish.weixinRelay);
+      return new WeixinRelayPublisher(
+        config.providers.publish.weixinRelay,
+        config.providers.publish.weixin,
+        config.features.article.publisher.accountId,
+      );
   }
 }
 

@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   defineConfig,
   resolveTrendPublishConfig,
+  resolveWeixinPublishAccount,
 } from "@src/utils/config/define-config.ts";
 
 Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
@@ -96,6 +97,7 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
   assertEquals(config.providers.ai.timeoutMs, 240000);
   assertEquals(config.providers.ai.maxAttempts, 3);
   assertEquals(config.features.article.publisher.provider, "weixin");
+  assertEquals(config.features.article.publisher.accountId, "");
   assertEquals(config.features.article.renderer.template, "dynamic");
   assertEquals(config.features.article.renderer.promptProfile, "business");
   assertEquals(config.features.article.count, 8);
@@ -132,6 +134,58 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
     config.providers.notify.dingtalk.webhook,
     "https://example.com/dingtalk",
   );
+});
+
+Deno.test("resolveTrendPublishConfig supports multiple weixin publish accounts", () => {
+  const config = resolveTrendPublishConfig(defineConfig({
+    providers: {
+      publish: {
+        weixin: {
+          author: "Default Author",
+          accounts: {
+            main: {
+              appId: "main-app",
+              appSecret: "main-secret",
+            },
+            lab: {
+              appId: "lab-app",
+              appSecret: "lab-secret",
+              author: "Lab Author",
+              needOpenComment: false,
+            },
+          },
+        },
+      },
+    },
+    features: {
+      article: {
+        publisher: {
+          provider: "weixin-relay",
+          accountId: "lab",
+        },
+      },
+    },
+  }));
+
+  assertEquals(config.features.article.publisher.accountId, "lab");
+  assertEquals(
+    config.providers.publish.weixin.accounts.main.author,
+    "Default Author",
+  );
+  assertEquals(
+    config.providers.publish.weixin.accounts.lab.author,
+    "Lab Author",
+  );
+  assertEquals(
+    config.providers.publish.weixin.accounts.lab.needOpenComment,
+    false,
+  );
+  const account = resolveWeixinPublishAccount(
+    config.providers.publish.weixin,
+    config.features.article.publisher.accountId,
+  );
+  assertEquals(account?.accountId, "lab");
+  assertEquals(account?.account.appId, "lab-app");
 });
 
 Deno.test("resolveTrendPublishConfig uses feature defaults without provider enablement", () => {

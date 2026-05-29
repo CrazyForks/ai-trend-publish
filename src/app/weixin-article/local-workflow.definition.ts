@@ -16,6 +16,8 @@ export function createLocalWeixinArticleWorkflowDefinition(): WorkflowDefinition
       await createLocalWeixinArticleDependencies(config, {
         outputDir: event.payload.dryRunOutputDir,
         profileId: runtimeConfig?.profile.id,
+        accountId: runtimeConfig?.account?.id ?? event.payload.accountId,
+        accountBrand: runtimeConfig?.account?.brand,
         runtimeConfigSnapshot: runtimeConfig?.snapshot,
       }),
   });

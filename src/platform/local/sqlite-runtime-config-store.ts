@@ -10,6 +10,7 @@ import type {
   RuntimeSchedule,
   RuntimeScheduleInput,
   RuntimeScheduleTick,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 import {
   RUNTIME_CONFIG_SCHEMA_SQL,
@@ -24,7 +25,9 @@ import {
   rowToCapabilityProfile,
   rowToFeatureProfile,
   rowToRuntimeSchedule,
+  rowToWeixinAccountProfile,
   RuntimeScheduleRow,
+  WeixinAccountProfileRow,
 } from "@src/core/storage/runtime-config-utils.ts";
 
 export class SQLiteRuntimeConfigStore implements RuntimeConfigStore {
@@ -319,6 +322,57 @@ export class SQLiteRuntimeConfigStore implements RuntimeConfigStore {
       }
       throw error;
     }
+  }
+
+  async listWeixinAccountProfiles(): Promise<WeixinAccountProfile[]> {
+    const rows = this.getDb().prepare(
+      "SELECT * FROM weixin_account_profiles ORDER BY enabled DESC, name ASC",
+    ).all() as WeixinAccountProfileRow[];
+    return rows.map(rowToWeixinAccountProfile);
+  }
+
+  async getWeixinAccountProfile(
+    id: string,
+  ): Promise<WeixinAccountProfile | null> {
+    const row = this.getDb().prepare(
+      "SELECT * FROM weixin_account_profiles WHERE id = ?",
+    ).get(id) as WeixinAccountProfileRow | undefined;
+    return row ? rowToWeixinAccountProfile(row) : null;
+  }
+
+  async saveWeixinAccountProfile(
+    profile: Omit<WeixinAccountProfile, "createdAt" | "updatedAt"> & {
+      createdAt?: string;
+      updatedAt?: string;
+    },
+  ): Promise<WeixinAccountProfile> {
+    const existing = await this.getWeixinAccountProfile(profile.id);
+    const timestamp = nowIso();
+    const createdAt = profile.createdAt || existing?.createdAt || timestamp;
+    const updatedAt = profile.updatedAt || timestamp;
+    this.getDb().prepare(
+      `INSERT OR REPLACE INTO weixin_account_profiles
+      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      profile.id,
+      profile.name,
+      profile.enabled ? 1 : 0,
+      profile.defaultArticleProfileId ?? null,
+      JSON.stringify(profile.brand ?? {}),
+      JSON.stringify(profile.defaults ?? {}),
+      createdAt,
+      updatedAt,
+    );
+    return { ...profile, createdAt, updatedAt };
+  }
+
+  async deleteWeixinAccountProfile(id: string): Promise<boolean> {
+    const existing = await this.getWeixinAccountProfile(id);
+    if (!existing) return false;
+    this.getDb().prepare("DELETE FROM weixin_account_profiles WHERE id = ?")
+      .run(id);
+    return true;
   }
 
   private getDb(): Database {

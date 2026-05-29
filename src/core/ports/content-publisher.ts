@@ -26,6 +26,7 @@ export interface PublishResult {
   status: PublishStatus;
   publishedAt: Date;
   platform: string;
+  accountId?: string;
   reason?: string;
 }
 

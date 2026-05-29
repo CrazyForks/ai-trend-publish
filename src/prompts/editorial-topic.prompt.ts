@@ -5,17 +5,22 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export function getEditorialTopicSystemPrompt(
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `你是中文公众号的资深选题主编，负责把候选文章聚类成“今天值得写的主题”，并判断每个主题的编辑价值。
 
 内容定位：${profile.label}
 目标读者：${profile.audience}
 编辑语气：${profile.editorialTone}
+${brandGuide}
 
 ${newsroomStyle}
 
@@ -82,7 +87,9 @@ export function getEditorialTopicUserPrompt(
   contents: ScrapedContent[],
   maxTopics = 8,
   memory?: EditorialMemoryContext,
+  accountBrand?: JsonObject,
 ): string {
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `请把下面候选文章聚类成最多 ${maxTopics} 个主题，并给每个主题评分。
 
 规则：
@@ -96,6 +103,7 @@ export function getEditorialTopicUserPrompt(
 - 来源表现只作为输入质量参考，不要把来源统计当作文章事实写进正文。
 
 ${formatEditorialMemory(memory)}
+${brandGuide}
 
 候选文章：
 ${

@@ -9,6 +9,7 @@ import { postProcessDynamicHtml } from "@src/features/weixin-article/rendering/d
 import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 import type { WeixinArticleRenderContext } from "@src/features/weixin-article/services/article-render.service.ts";
 import { createStructuredJsonCompletion } from "@src/utils/llm-structured-output.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 const logger = new Logger("weixin-dynamic-html-generator");
 
@@ -22,6 +23,7 @@ export class WeixinDynamicHtmlGenerator {
   constructor(
     private llm: LLMProvider,
     private readonly promptProfile?: PromptProfileName,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   public async generate(
@@ -35,7 +37,10 @@ export class WeixinDynamicHtmlGenerator {
     const messages = [
       {
         role: "system" as const,
-        content: getDynamicHtmlSystemPrompt(this.promptProfile),
+        content: getDynamicHtmlSystemPrompt(
+          this.promptProfile,
+          this.accountBrand,
+        ),
       },
       {
         role: "user" as const,
@@ -43,6 +48,7 @@ export class WeixinDynamicHtmlGenerator {
           articles,
           this.promptProfile,
           context?.articlePlan,
+          this.accountBrand,
         ),
       },
     ];

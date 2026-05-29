@@ -45,8 +45,11 @@ export default defineConfig((runtime) => ({
         appId: runtime.secret("WEIXIN_APP_ID"),
         appSecret: runtime.secret("WEIXIN_APP_SECRET"),
         author: runtime.value("WEIXIN_AUTHOR", "AI Trend Publish"),
+        // 多公众号时可在这里配置 accounts，并用 WEIXIN_ACCOUNT_ID 选择。
+        accounts: {},
       },
       weixinRelay: {
+        // relay 只保存自己的 API key；微信 appId/appSecret 仍由当前配置透传。
         url: runtime.secret("WEIXIN_RELAY_URL"),
         token: runtime.secret("WEIXIN_RELAY_TOKEN"),
       },
@@ -68,6 +71,7 @@ export default defineConfig((runtime) => ({
         provider: runtime.value("WEIXIN_PUBLISH_PROVIDER", "weixin") as
           | "weixin"
           | "weixin-relay",
+        accountId: runtime.value("WEIXIN_ACCOUNT_ID", ""),
       },
       renderer: {
         template: "dynamic",

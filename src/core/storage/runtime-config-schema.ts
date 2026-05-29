@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS runtime_schedule_ticks (
   triggered_at TEXT NOT NULL,
   PRIMARY KEY(schedule_id, slot)
 );
+CREATE TABLE IF NOT EXISTS weixin_account_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  default_article_profile_id TEXT,
+  brand_json TEXT NOT NULL DEFAULT '{}',
+  defaults_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_weixin_account_profiles_enabled
+  ON weixin_account_profiles(enabled, name);
 `;
 
 export function splitSqlStatements(sql: string): string[] {

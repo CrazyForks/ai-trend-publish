@@ -17,6 +17,10 @@ export type RunStepStatus =
 
 export interface ArticleRunRecord {
   runId: string;
+  runKind?: "single" | "matrix-parent" | "matrix-child";
+  parentRunId?: string;
+  accountId?: string;
+  profileId?: string;
   mode: RuntimeMode;
   status: RunStatus;
   dryRun: boolean;
@@ -48,6 +52,10 @@ export interface ArticleRunDetail extends ArticleRunRecord {
 
 export interface StartRunInput {
   runId: string;
+  runKind?: ArticleRunRecord["runKind"];
+  parentRunId?: string;
+  accountId?: string;
+  profileId?: string;
   mode: RuntimeMode;
   dryRun: boolean;
   trigger: RunTrigger;

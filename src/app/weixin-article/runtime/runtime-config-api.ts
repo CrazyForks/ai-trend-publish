@@ -5,10 +5,16 @@ import type {
   JsonValue,
   RuntimeArticleSourceInput,
   RuntimeConfigStore,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 import type {
   FetchProviderName,
   ResolvedTrendPublishConfig,
+  ResolvedWeixinPublishAccountConfig,
+} from "@src/utils/config/define-config.ts";
+import {
+  hasAnyResolvedWeixinAccount,
+  isResolvedWeixinAccountConfigured,
 } from "@src/utils/config/define-config.ts";
 import {
   createArticleRuntimeProfile,
@@ -31,6 +37,60 @@ export async function handleRuntimeConfigApi(
 
   if (pathname === "/api/config/providers" && request.method === "GET") {
     return jsonResponse({ providers: createProviderStatus(baseConfig) });
+  }
+
+  if (pathname === "/api/config/weixin/accounts") {
+    if (request.method === "GET") {
+      const accounts = await store.listWeixinAccountProfiles();
+      return jsonResponse({
+        accounts: accounts.map((account) =>
+          withWeixinAccountRelayStatus(account, baseConfig)
+        ),
+      });
+    }
+    if (request.method === "POST") {
+      const body = await requestJson<JsonObject>(request);
+      const input = weixinAccountFromBody(body);
+      const issues = validateWeixinAccount(input);
+      if (issues.length > 0) return validationResponse(issues);
+      return jsonResponse({
+        account: await store.saveWeixinAccountProfile(input),
+      }, 201);
+    }
+  }
+
+  const accountMatch = pathname.match(
+    /^\/api\/config\/weixin\/accounts\/([^/]+)$/,
+  );
+  if (accountMatch) {
+    const id = decodeURIComponent(accountMatch[1]);
+    if (request.method === "GET") {
+      const account = await store.getWeixinAccountProfile(id);
+      return account
+        ? jsonResponse({
+          account: withWeixinAccountRelayStatus(account, baseConfig),
+        })
+        : jsonResponse({ error: "公众号账号不存在" }, 404);
+    }
+    if (request.method === "PATCH") {
+      const existing = await store.getWeixinAccountProfile(id);
+      if (!existing) return jsonResponse({ error: "公众号账号不存在" }, 404);
+      const body = await requestJson<JsonObject>(request);
+      const next = {
+        ...existing,
+        ...weixinAccountPatchFromBody(existing, body),
+      };
+      const issues = validateWeixinAccount(next);
+      if (issues.length > 0) return validationResponse(issues);
+      return jsonResponse({
+        account: await store.saveWeixinAccountProfile(next),
+      });
+    }
+    if (request.method === "DELETE") {
+      return jsonResponse({
+        deleted: await store.deleteWeixinAccountProfile(id),
+      });
+    }
   }
 
   if (pathname === "/api/config/capabilities") {
@@ -272,10 +332,7 @@ export function createProviderStatus(config: ResolvedTrendPublishConfig) {
       minimax: Boolean(config.providers.image.minimax.apiKey),
     },
     publish: {
-      weixin: Boolean(
-        config.providers.publish.weixin.appId &&
-          config.providers.publish.weixin.appSecret,
-      ),
+      weixin: hasAnyResolvedWeixinAccount(config.providers.publish.weixin),
       weixinRelay: Boolean(
         config.providers.publish.weixinRelay.url &&
           config.providers.publish.weixinRelay.token,
@@ -324,6 +381,94 @@ function capabilityPatchFromBody(
     version: numberValue(body.version) ?? existing.version,
     isDefault: booleanValue(body.isDefault) ?? existing.isDefault,
   };
+}
+
+function weixinAccountFromBody(
+  body: JsonObject,
+): Omit<WeixinAccountProfile, "createdAt" | "updatedAt"> {
+  return {
+    id: stringValue(body.id) ?? `wx-${crypto.randomUUID()}`,
+    name: stringValue(body.name) ?? "未命名公众号",
+    enabled: booleanValue(body.enabled) ?? true,
+    defaultArticleProfileId: stringValue(body.defaultArticleProfileId),
+    brand: objectValue(body.brand),
+    defaults: objectValue(body.defaults),
+  };
+}
+
+function weixinAccountPatchFromBody(
+  existing: WeixinAccountProfile,
+  body: JsonObject,
+): Partial<WeixinAccountProfile> {
+  return {
+    name: stringValue(body.name) ?? existing.name,
+    enabled: booleanValue(body.enabled) ?? existing.enabled,
+    defaultArticleProfileId: Object.hasOwn(body, "defaultArticleProfileId")
+      ? stringValue(body.defaultArticleProfileId)
+      : existing.defaultArticleProfileId,
+    brand: Object.hasOwn(body, "brand")
+      ? objectValue(body.brand)
+      : existing.brand,
+    defaults: Object.hasOwn(body, "defaults")
+      ? objectValue(body.defaults)
+      : existing.defaults,
+  };
+}
+
+function withWeixinAccountRelayStatus(
+  account: WeixinAccountProfile,
+  config: ResolvedTrendPublishConfig,
+): WeixinAccountProfile {
+  const weixin = config.providers.publish.weixin;
+  const providerAccount = account.id === "default"
+    ? weixin
+    : weixin.accounts[account.id];
+  const defaultConfigured = isResolvedWeixinAccountConfigured(weixin);
+  return {
+    ...account,
+    relay: {
+      configured: providerAccount
+        ? isResolvedWeixinAccountConfigured(providerAccount)
+        : false,
+      defaultConfigured,
+      appIdMasked: providerAccount
+        ? maskAppId(providerAccount.appId)
+        : undefined,
+      lastCheckedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function maskAppId(
+  appId: ResolvedWeixinPublishAccountConfig["appId"],
+): string | undefined {
+  if (!appId) return undefined;
+  if (appId.length <= 8) return `${appId.slice(0, 2)}****`;
+  return `${appId.slice(0, 4)}****${appId.slice(-4)}`;
+}
+
+function validateWeixinAccount(
+  account: Partial<WeixinAccountProfile>,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!stringValue(account.id)) {
+    issues.push({ path: "id", message: "账号 ID 不能为空" });
+  } else if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(account.id ?? "")) {
+    issues.push({
+      path: "id",
+      message: "账号 ID 只能包含字母、数字、下划线和连字符，最长 64 个字符",
+    });
+  }
+  if (!stringValue(account.name)) {
+    issues.push({ path: "name", message: "账号名称不能为空" });
+  }
+  if (!objectValue(account.brand)) {
+    issues.push({ path: "brand", message: "brand 必须是对象" });
+  }
+  if (!objectValue(account.defaults)) {
+    issues.push({ path: "defaults", message: "defaults 必须是对象" });
+  }
+  return issues;
 }
 
 interface ValidationIssue {
@@ -470,6 +615,11 @@ async function validateArticlePatch(
       publisher.provider,
       "article.publisher.provider",
       ["weixin", "weixin-relay"],
+      issues,
+    );
+    validateOptionalAccountId(
+      publisher.accountId,
+      "article.publisher.accountId",
       issues,
     );
   }
@@ -744,6 +894,23 @@ function validateStringEnum(
   if (value === undefined) return;
   if (typeof value !== "string" || !allowed.includes(value)) {
     issues.push({ path, message: `必须是以下值之一: ${allowed.join(", ")}` });
+  }
+}
+
+function validateOptionalAccountId(
+  value: JsonValue | undefined,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (value === undefined || value === "") return;
+  if (
+    typeof value !== "string" ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value)
+  ) {
+    issues.push({
+      path,
+      message: "账号 ID 只能包含字母、数字、下划线和连字符，最长 64 个字符",
+    });
   }
 }
 

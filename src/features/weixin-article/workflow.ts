@@ -45,11 +45,15 @@ interface WeixinWorkflowParams {
   runId?: string;
   trigger?: "manual" | "cron";
   profileId?: string;
+  accountId?: string;
+  runKind?: "single" | "matrix-parent" | "matrix-child";
+  parentRunId?: string;
 }
 
 export interface WeixinArticleWorkflowConfig {
   dryRun: boolean;
   profileId?: string;
+  accountId?: string;
   runtimeConfigSnapshot?: JsonObject;
   qualityGate: ResolvedTrendPublishConfig["features"]["article"]["qualityGate"];
 }
@@ -79,6 +83,12 @@ export class WeixinArticleWorkflow {
       await runStateStore.startRun({
         runId,
         mode: this.dependencies.runtime.mode,
+        runKind: event.payload.runKind ?? "single",
+        parentRunId: event.payload.parentRunId,
+        accountId: event.payload.accountId ??
+          this.dependencies.config.accountId,
+        profileId: event.payload.profileId ??
+          this.dependencies.config.profileId,
         dryRun,
         trigger: event.payload.trigger ?? "manual",
       });

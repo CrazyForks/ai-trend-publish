@@ -1,4 +1,7 @@
-import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import {
+  hasAnyResolvedWeixinAccount,
+  type ResolvedTrendPublishConfig,
+} from "@src/utils/config/define-config.ts";
 
 export interface DashboardConfigSummary {
   mode: "local" | "cloudflare-workflow";
@@ -12,6 +15,7 @@ export interface DashboardConfigSummary {
     };
     publisher: {
       provider: string;
+      accountId: string;
     };
     cover: {
       enabled: boolean;
@@ -72,6 +76,7 @@ export function createDashboardConfigSummary(
       },
       publisher: {
         provider: article.publisher.provider,
+        accountId: article.publisher.accountId,
       },
       cover: {
         enabled: article.cover.enabled,
@@ -128,10 +133,7 @@ export function createDashboardConfigSummary(
       rss: Boolean(config.providers.fetch.rss.baseUrl),
       dashscopeImage: Boolean(config.providers.image.dashscope.apiKey),
       minimaxImage: Boolean(config.providers.image.minimax.apiKey),
-      weixin: Boolean(
-        config.providers.publish.weixin.appId &&
-          config.providers.publish.weixin.appSecret,
-      ),
+      weixin: hasAnyResolvedWeixinAccount(config.providers.publish.weixin),
       weixinRelay: Boolean(
         config.providers.publish.weixinRelay.url &&
           config.providers.publish.weixinRelay.token,

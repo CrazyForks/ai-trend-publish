@@ -13,6 +13,7 @@ import {
 import {
   ArticleNotificationChannel,
   ResolvedTrendPublishConfig,
+  resolveWeixinPublishAccount,
 } from "@src/utils/config/define-config.ts";
 
 type CheckStatus = "pass" | "warn" | "fail";
@@ -86,6 +87,7 @@ function checkFiles(configPath?: string) {
     "wrangler.jsonc",
     "migrations/0001_article_workflow_state.sql",
     "migrations/0002_runtime_config_center.sql",
+    "migrations/0003_weixin_account_matrix.sql",
     "src/features/weixin-article/rendering/template-registry.ts",
     "src/features/weixin-article/rendering/templates/article.ejs",
     "src/features/weixin-article/rendering/templates/article.modern.ejs",
@@ -206,38 +208,53 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
   ]);
 
   if (config.features.article.publisher.provider === "weixin") {
+    const account = resolveWeixinPublishAccount(
+      config.providers.publish.weixin,
+      config.features.article.publisher.accountId,
+    );
     checkRequired(
       "微信发布",
       config.features.article.dryRun
         ? "微信公众号配置(dry-run)"
         : "微信公众号配置",
-      config.features.article.dryRun ? [] : [
+      config.features.article.dryRun || account ? [] : [
         [
-          "providers.publish.weixin.appId",
-          config.providers.publish.weixin.appId,
-        ],
-        [
-          "providers.publish.weixin.appSecret",
-          config.providers.publish.weixin.appSecret,
+          config.features.article.publisher.accountId
+            ? `providers.publish.weixin.accounts.${config.features.article.publisher.accountId}`
+            : "providers.publish.weixin.appId/appSecret 或 providers.publish.weixin.accounts",
+          "",
         ],
       ],
     );
   } else {
+    const account = resolveWeixinPublishAccount(
+      config.providers.publish.weixin,
+      config.features.article.publisher.accountId,
+    );
+    const publishRequirements: Array<[string, string]> = [
+      [
+        "providers.publish.weixinRelay.url",
+        config.providers.publish.weixinRelay.url,
+      ],
+      [
+        "providers.publish.weixinRelay.token",
+        config.providers.publish.weixinRelay.token,
+      ],
+    ];
+    if (!account) {
+      publishRequirements.push([
+        config.features.article.publisher.accountId
+          ? `providers.publish.weixin.accounts.${config.features.article.publisher.accountId}`
+          : "providers.publish.weixin.appId/appSecret 或 providers.publish.weixin.accounts",
+        "",
+      ]);
+    }
     checkRequired(
       "微信发布",
       config.features.article.dryRun
         ? "微信 Relay 配置(dry-run)"
-        : "微信 Relay 配置",
-      config.features.article.dryRun ? [] : [
-        [
-          "providers.publish.weixinRelay.url",
-          config.providers.publish.weixinRelay.url,
-        ],
-        [
-          "providers.publish.weixinRelay.token",
-          config.providers.publish.weixinRelay.token,
-        ],
-      ],
+        : "微信 Relay 透传配置",
+      config.features.article.dryRun ? [] : publishRequirements,
     );
   }
 
@@ -245,7 +262,11 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
     "pass",
     "微信文章",
     "features.article.publisher.provider",
-    `当前发布供应商: ${config.features.article.publisher.provider}`,
+    `当前发布供应商: ${config.features.article.publisher.provider}${
+      config.features.article.publisher.accountId
+        ? `，账号: ${config.features.article.publisher.accountId}`
+        : ""
+    }`,
   );
   add(
     "pass",

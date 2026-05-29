@@ -10,6 +10,8 @@ import {
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
 import { redactError } from "@src/utils/security/redact.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
 
 const logger = new Logger("weixin-article-cover-service");
 
@@ -47,6 +49,7 @@ export class WeixinArticleCoverService {
     private readonly imageGeneratorType:
       | ImageGeneratorType.ALIYUN_POSTER
       | ImageGeneratorType.MINIMAX_IMAGE = ImageGeneratorType.ALIYUN_POSTER,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   public async generateCoverMediaId(title: string): Promise<string> {
@@ -79,6 +82,9 @@ export class WeixinArticleCoverService {
       .getGenerator(this.imageGeneratorType);
     const coverTitle = getCoverTitle(title);
     const profile = resolvePromptProfile(this.promptProfile);
+    const brandGuide = formatAccountBrandGuide(this.accountBrand)
+      .replace(/\n+/g, " ")
+      .trim();
     const imageUrl = await imageGenerator.generate({
       model: this.imageModel,
       title: coverTitle,
@@ -90,8 +96,9 @@ export class WeixinArticleCoverService {
         `目标读者：${profile.audience}`,
         `视觉风格：${profile.editorialTone}`,
         `画面元素：${profile.imageGuidance}`,
+        brandGuide ? `账号约束：${brandGuide}` : "",
         "限制：不要出现二维码、水印、品牌 Logo、可识别人脸；不要生成除标题外的多余小字",
-      ].join(" | "),
+      ].filter(Boolean).join(" | "),
       generate_mode: "generate",
       generate_num: 1,
     });

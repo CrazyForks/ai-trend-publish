@@ -166,6 +166,98 @@ Deno.test("runtime config resolves MiniMax image capability provider", async () 
   assertEquals(resolved.config.features.article.bodyImages.model, "image-01");
 });
 
+Deno.test("runtime config resolves weixin account defaults without mutating article profile", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+
+  await store.saveWeixinAccountProfile({
+    id: "lab",
+    name: "实验室账号",
+    enabled: true,
+    defaultArticleProfileId: detail.profile.id,
+    brand: {
+      positioning: "给工程团队看的 AI 基建观察",
+      audience: "技术负责人和开发者",
+      tone: "冷静、具体、有判断",
+      titleStyle: "少用速递，强调新闻钩子",
+      forbiddenTopics: ["空泛融资新闻"],
+    },
+    defaults: {
+      template: "minimal",
+      promptProfile: "business",
+      count: 3,
+    },
+  });
+
+  const resolved = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    undefined,
+    "lab",
+  );
+  const unchanged = await getArticleRuntimeProfileDetail(
+    store,
+    config,
+    detail.profile.id,
+  );
+
+  assertEquals(resolved.account?.id, "lab");
+  assertEquals(resolved.config.features.article.publisher.accountId, "lab");
+  assertEquals(resolved.config.features.article.renderer.template, "minimal");
+  assertEquals(
+    resolved.config.features.article.renderer.promptProfile,
+    "business",
+  );
+  assertEquals(resolved.config.features.article.count, 3);
+  assertEquals(resolved.snapshot.account?.["id"], "lab");
+  assertEquals(unchanged.article.renderer.template, "dynamic");
+  assertEquals(unchanged.article.count, 5);
+});
+
+Deno.test("runtime config API manages weixin account profiles", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+
+  const createResponse = await handleRuntimeConfigApi(
+    jsonRequest({
+      id: "main",
+      name: "主账号",
+      enabled: true,
+      brand: { positioning: "AI 新闻精选" },
+      defaults: { count: 4 },
+    }, "POST"),
+    "/api/config/weixin/accounts",
+    store,
+    config,
+  );
+  assert(createResponse);
+  assertEquals(createResponse.status, 201);
+
+  const patchResponse = await handleRuntimeConfigApi(
+    jsonRequest({ name: "主账号 Pro" }, "PATCH"),
+    "/api/config/weixin/accounts/main",
+    store,
+    config,
+  );
+  assert(patchResponse);
+  const patched = await patchResponse.json();
+  assertEquals(patched.account.name, "主账号 Pro");
+  assertEquals(patched.account.brand.positioning, "AI 新闻精选");
+
+  const deleteResponse = await handleRuntimeConfigApi(
+    jsonRequest({}, "DELETE"),
+    "/api/config/weixin/accounts/main",
+    store,
+    config,
+  );
+  assert(deleteResponse);
+  const deleted = await deleteResponse.json();
+  assertEquals(deleted.deleted, true);
+});
+
 Deno.test("runtime config migrates legacy DashScope cover model", async () => {
   const store = new SQLiteRuntimeConfigStore(":memory:");
   const config = resolveTrendPublishConfig({

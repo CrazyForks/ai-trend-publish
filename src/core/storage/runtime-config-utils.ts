@@ -4,6 +4,7 @@ import type {
   JsonObject,
   RuntimeFeatureProfile,
   RuntimeSchedule,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 
 export interface CapabilityProfileRow {
@@ -41,6 +42,17 @@ export interface RuntimeScheduleRow {
   timezone: string;
   dry_run: number;
   last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeixinAccountProfileRow {
+  id: string;
+  name: string;
+  enabled: number;
+  default_article_profile_id: string | null;
+  brand_json: string | null;
+  defaults_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,6 +107,21 @@ export function rowToRuntimeSchedule(
     timezone: row.timezone,
     dryRun: Boolean(row.dry_run),
     lastTriggeredAt: row.last_triggered_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function rowToWeixinAccountProfile(
+  row: WeixinAccountProfileRow,
+): WeixinAccountProfile {
+  return {
+    id: row.id,
+    name: row.name,
+    enabled: Boolean(row.enabled),
+    defaultArticleProfileId: row.default_article_profile_id ?? undefined,
+    brand: parseJsonObject(row.brand_json),
+    defaults: parseJsonObject(row.defaults_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

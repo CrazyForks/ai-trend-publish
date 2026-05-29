@@ -5,18 +5,23 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export function getDynamicHtmlSystemPrompt(
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `你是中文公众号的资深排版编辑。你需要根据文章内容生成适合微信公众号编辑器粘贴的 HTML。
 
 目标读者：
 - ${profile.audience}。
 
 当前内容定位：${profile.label}。
+${brandGuide}
 
 ${newsroomStyle}
 
@@ -66,9 +71,11 @@ export function getDynamicHtmlUserPrompt(
   articles: WeixinTemplate[],
   promptProfile?: PromptProfileName,
   articlePlan?: ArticlePlan,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   const compactArticles = articles.map((article, index) => ({
     index: index + 1,
     title: article.title,
@@ -97,6 +104,7 @@ ${JSON.stringify(compactArticlePlan(articlePlan), null, 2)}
 版式口径：${profile.layoutGuidance}
 成文角度：
 ${profile.contentAngles.map((item) => `- ${item}`).join("\n")}
+${brandGuide}
 
 ${newsroomStyle}
 

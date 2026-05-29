@@ -26,6 +26,10 @@ export class KvD1RunStateStore implements RunStateStore {
     const timestamp = nowIso();
     const record: ArticleRunRecord = {
       runId: input.runId,
+      runKind: input.runKind ?? "single",
+      parentRunId: input.parentRunId,
+      accountId: input.accountId,
+      profileId: input.profileId,
       mode: input.mode,
       status: "running",
       dryRun: input.dryRun,
@@ -165,10 +169,14 @@ export class KvD1RunStateStore implements RunStateStore {
     await this.ensureSchema();
     await this.d1.prepare(
       `INSERT OR REPLACE INTO article_runs
-      (run_id, mode, status, dry_run, trigger_type, created_at, updated_at, finished_at, summary, error, artifacts_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (run_id, run_kind, parent_run_id, account_id, profile_id, mode, status, dry_run, trigger_type, created_at, updated_at, finished_at, summary, error, artifacts_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       record.runId,
+      record.runKind ?? "single",
+      record.parentRunId ?? null,
+      record.accountId ?? null,
+      record.profileId ?? null,
       record.mode,
       record.status,
       record.dryRun ? 1 : 0,
@@ -229,12 +237,30 @@ export class KvD1RunStateStore implements RunStateStore {
     for (const statement of splitSqlStatements(ARTICLE_WORKFLOW_SCHEMA_SQL)) {
       await this.d1.prepare(statement).run();
     }
+    for (
+      const statement of [
+        "ALTER TABLE article_runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'single'",
+        "ALTER TABLE article_runs ADD COLUMN parent_run_id TEXT",
+        "ALTER TABLE article_runs ADD COLUMN account_id TEXT",
+        "ALTER TABLE article_runs ADD COLUMN profile_id TEXT",
+      ]
+    ) {
+      try {
+        await this.d1.prepare(statement).run();
+      } catch {
+        // Existing deployments may already have the column.
+      }
+    }
     this.schemaReady = true;
   }
 }
 
 interface RunRow {
   run_id: string;
+  run_kind?: ArticleRunRecord["runKind"] | null;
+  parent_run_id?: string | null;
+  account_id?: string | null;
+  profile_id?: string | null;
   mode: ArticleRunRecord["mode"];
   status: ArticleRunRecord["status"];
   dry_run: number;
@@ -263,6 +289,10 @@ interface StepRow {
 function rowToRun(row: RunRow): ArticleRunRecord {
   return {
     runId: row.run_id,
+    runKind: row.run_kind ?? "single",
+    parentRunId: row.parent_run_id ?? undefined,
+    accountId: row.account_id ?? undefined,
+    profileId: row.profile_id ?? undefined,
     mode: row.mode,
     status: row.status,
     dryRun: Boolean(row.dry_run),

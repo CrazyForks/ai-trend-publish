@@ -199,6 +199,63 @@ async function handleRunsRequest(req: Request, pathname: string) {
   const config = await getAppConfig();
   const stores = createLocalArticleRuntimeStores(config);
 
+  if (req.method === "POST" && pathname === "/api/runs/matrix") {
+    const payload = await req.json().catch(() => ({})) as {
+      accountIds?: string[];
+      profileId?: string;
+      dryRun?: boolean;
+      sourceType?: WeixinArticleWorkflowInput["sourceType"];
+      maxArticles?: number;
+    };
+    if (payload.dryRun === false) {
+      return jsonResponse({ error: "矩阵运行第一版只允许 dry-run" }, 400);
+    }
+    const accountIds = [...new Set(payload.accountIds ?? [])]
+      .filter((id) => typeof id === "string" && id.trim())
+      .map((id) => id.trim());
+    if (accountIds.length === 0) {
+      return jsonResponse({ error: "请选择至少一个公众号账号" }, 400);
+    }
+    const matrixRunId = `matrix-${crypto.randomUUID()}`;
+    await stores.runStateStore.startRun({
+      runId: matrixRunId,
+      runKind: "matrix-parent",
+      mode: "local",
+      dryRun: true,
+      trigger: "manual",
+      profileId: payload.profileId,
+    });
+    const runtime = new LocalWorkflowRuntime();
+    const childRunIds: string[] = [];
+    for (const accountId of accountIds) {
+      const runId = `${matrixRunId}-${accountId}`;
+      childRunIds.push(runId);
+      await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
+        payload: {
+          ...payload,
+          dryRun: true,
+          accountId,
+          runId,
+          runKind: "matrix-child",
+          parentRunId: matrixRunId,
+          trigger: "manual",
+        },
+        id: runId,
+        timestamp: Date.now(),
+      });
+      await stores.runStateStore.updateRun(runId, {
+        runKind: "matrix-child",
+        parentRunId: matrixRunId,
+        accountId,
+        profileId: payload.profileId,
+      });
+    }
+    await stores.runStateStore.finishRun(matrixRunId, {
+      summary: `矩阵 dry-run 完成：${childRunIds.length} 个账号`,
+    });
+    return jsonResponse({ success: true, matrixRunId, childRunIds });
+  }
+
   if (req.method === "POST" && pathname === "/api/runs") {
     const payload = await req.json().catch(
       () => ({}),

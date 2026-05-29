@@ -1,5 +1,6 @@
 import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
 import type { LLMProvider } from "@src/core/ports/llm.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 import type { ArticlePlan } from "@src/features/weixin-article/domain/article-plan.ts";
 import type { EditorialTopicReport } from "@src/features/weixin-article/domain/editorial-topic.ts";
 import type { EvidencePack } from "@src/features/weixin-article/domain/evidence.ts";
@@ -35,6 +36,7 @@ export class WeixinArticleQualityReviewService {
   constructor(
     private readonly llm: LLMProvider,
     private readonly promptProfile?: PromptProfileName,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   async reviewArticle(input: {
@@ -49,11 +51,18 @@ export class WeixinArticleQualityReviewService {
       const messages = [
         {
           role: "system" as const,
-          content: getQualityReviewSystemPrompt(this.promptProfile),
+          content: getQualityReviewSystemPrompt(
+            this.promptProfile,
+            this.accountBrand,
+          ),
         },
         {
           role: "user" as const,
-          content: getQualityReviewUserPrompt(input, this.promptProfile),
+          content: getQualityReviewUserPrompt(
+            input,
+            this.promptProfile,
+            this.accountBrand,
+          ),
         },
       ];
       return await createStructuredJsonCompletion<

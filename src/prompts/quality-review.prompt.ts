@@ -7,18 +7,23 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export function getQualityReviewSystemPrompt(
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `你是中文公众号发布前的质量审稿人。你需要检查一篇即将发布的公众号文章是否可靠、清晰、合规。
 
 目标读者：
 - ${profile.audience}
 
 当前内容定位：${profile.label}
+${brandGuide}
 
 ${newsroomStyle}
 
@@ -94,9 +99,11 @@ export function getQualityReviewUserPrompt(
     evidencePack?: EvidencePack;
   },
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   const compactContents = input.contents.map((content, index) => ({
     index: index + 1,
     id: content.id,
@@ -133,6 +140,7 @@ export function getQualityReviewUserPrompt(
 
 当前内容定位：${profile.label}
 目标读者：${profile.audience}
+${brandGuide}
 
 ${newsroomStyle}
 

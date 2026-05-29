@@ -57,6 +57,7 @@ function collectSecrets(
     ["ARTICLE_RENDERER_TEMPLATE", article.renderer.template],
     ["ARTICLE_PROMPT_PROFILE", article.renderer.promptProfile],
     ["WEIXIN_PUBLISH_PROVIDER", article.publisher.provider],
+    ["WEIXIN_ACCOUNT_ID", article.publisher.accountId],
     ["FIRECRAWL_API_KEY", providers.fetch.firecrawl?.apiKey],
     ["JINA_API_KEY", providers.fetch.jina?.apiKey],
     ["BRAVE_SEARCH_API_KEY", providers.fetch.brave?.apiKey],

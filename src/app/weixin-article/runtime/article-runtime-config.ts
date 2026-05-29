@@ -13,6 +13,7 @@ import type {
   RuntimeArticleSource,
   RuntimeFeatureProfile,
   RuntimeSchedule,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 
 export const ARTICLE_FEATURE_KEY = "article";
@@ -34,6 +35,7 @@ export interface ArticleFeatureProfileConfig {
   };
   publisher: {
     provider: "weixin" | "weixin-relay";
+    accountId?: string;
   };
   cover: {
     enabled: boolean;
@@ -84,6 +86,7 @@ export interface ResolvedArticleRuntimeConfig {
   config: ResolvedTrendPublishConfig;
   profile: RuntimeFeatureProfile;
   article: ArticleFeatureProfileConfig;
+  account?: WeixinAccountProfile;
   snapshot: JsonObject;
 }
 

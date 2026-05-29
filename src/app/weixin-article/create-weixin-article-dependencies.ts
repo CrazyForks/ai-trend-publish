@@ -63,6 +63,8 @@ export interface CreateWeixinArticleDependenciesOptions {
   vectorStoreFactory?: () => Promise<VectorStore>;
   editorialMemoryStore?: EditorialMemoryStore;
   profileId?: string;
+  accountId?: string;
+  accountBrand?: JsonObject;
   runtimeConfigSnapshot?: JsonObject;
 }
 
@@ -76,7 +78,9 @@ export async function createWeixinArticleDependencies(
     contents: 0,
     duplicates: 0,
   };
-  const publisher = createPublisher(config);
+  const effectiveAccountId = options.accountId ??
+    config.features.article.publisher.accountId;
+  const publisher = createPublisher(config, effectiveAccountId);
   const notifier = createArticleNotifier(config);
   const llmResolver = new LlmProviderResolver(config);
   const llmProvider = await llmResolver.getDefaultProvider();
@@ -86,6 +90,7 @@ export async function createWeixinArticleDependencies(
   const deduplication = config.features.article.deduplication;
   const renderer = config.features.article.renderer;
   const promptProfile = renderer.promptProfile;
+  const accountBrand = options.accountBrand;
   const artifactStore = options.artifactStore ?? new MemoryArtifactStore();
   const runStateStore = options.runStateStore ?? new MemoryRunStateStore();
   const editorialMemoryStore = options.editorialMemoryStore ??
@@ -151,10 +156,15 @@ export async function createWeixinArticleDependencies(
         config.features.article.cover.provider,
         "cover",
       ),
+      accountBrand,
     ),
     renderService: new WeixinArticleRenderService(
       new WeixinArticleTemplateRenderer(
-        new WeixinDynamicHtmlGenerator(llmProvider, promptProfile),
+        new WeixinDynamicHtmlGenerator(
+          llmProvider,
+          promptProfile,
+          accountBrand,
+        ),
         true,
         imageLayoutService,
         publisher,
@@ -166,6 +176,8 @@ export async function createWeixinArticleDependencies(
     editorialTopicService: new WeixinArticleEditorialTopicService(
       llmProvider,
       promptProfile,
+      8,
+      accountBrand,
     ),
     editorialDecisionService: new WeixinArticleEditorialDecisionService(
       llmProvider,
@@ -174,6 +186,7 @@ export async function createWeixinArticleDependencies(
     articlePlanService: new WeixinArticlePlanService(
       llmProvider,
       promptProfile,
+      accountBrand,
     ),
     researchService: new WeixinArticleResearchService(
       articleFetchRouter,
@@ -187,6 +200,7 @@ export async function createWeixinArticleDependencies(
     qualityReviewService: new WeixinArticleQualityReviewService(
       llmProvider,
       promptProfile,
+      accountBrand,
     ),
     revisionService: new WeixinArticleRevisionService(
       llmProvider,
@@ -202,6 +216,7 @@ export async function createWeixinArticleDependencies(
     config: {
       dryRun: config.features.article.dryRun,
       profileId: options.profileId,
+      accountId: effectiveAccountId,
       runtimeConfigSnapshot: options.runtimeConfigSnapshot,
       qualityGate: config.features.article.qualityGate,
     },
@@ -224,12 +239,20 @@ function resolveResearchSearchProviders(
 
 function createPublisher(
   config: ResolvedTrendPublishConfig,
+  accountId = config.features.article.publisher.accountId,
 ): WeixinArticlePublisher {
   switch (config.features.article.publisher.provider) {
     case "weixin":
-      return new WeixinPublisher(config.providers.publish.weixin);
+      return new WeixinPublisher(
+        config.providers.publish.weixin,
+        accountId,
+      );
     case "weixin-relay":
-      return new WeixinRelayPublisher(config.providers.publish.weixinRelay);
+      return new WeixinRelayPublisher(
+        config.providers.publish.weixinRelay,
+        config.providers.publish.weixin,
+        accountId,
+      );
   }
 }
 

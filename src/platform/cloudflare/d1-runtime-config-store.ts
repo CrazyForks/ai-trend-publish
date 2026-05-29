@@ -8,6 +8,7 @@ import type {
   RuntimeSchedule,
   RuntimeScheduleInput,
   RuntimeScheduleTick,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 import {
   RUNTIME_CONFIG_SCHEMA_SQL,
@@ -23,7 +24,9 @@ import {
   rowToCapabilityProfile,
   rowToFeatureProfile,
   rowToRuntimeSchedule,
+  rowToWeixinAccountProfile,
   RuntimeScheduleRow,
+  WeixinAccountProfileRow,
 } from "@src/core/storage/runtime-config-utils.ts";
 import type { CloudflareD1Database } from "@src/platform/cloudflare/cloudflare-bindings.ts";
 
@@ -333,6 +336,61 @@ export class D1RuntimeConfigStore implements RuntimeConfigStore {
       }
       throw error;
     }
+  }
+
+  async listWeixinAccountProfiles(): Promise<WeixinAccountProfile[]> {
+    await this.ensureSchema();
+    const result = await this.d1.prepare(
+      "SELECT * FROM weixin_account_profiles ORDER BY enabled DESC, name ASC",
+    ).all<WeixinAccountProfileRow>();
+    return result.results.map(rowToWeixinAccountProfile);
+  }
+
+  async getWeixinAccountProfile(
+    id: string,
+  ): Promise<WeixinAccountProfile | null> {
+    await this.ensureSchema();
+    const row = await this.d1.prepare(
+      "SELECT * FROM weixin_account_profiles WHERE id = ?",
+    ).bind(id).first<WeixinAccountProfileRow>();
+    return row ? rowToWeixinAccountProfile(row) : null;
+  }
+
+  async saveWeixinAccountProfile(
+    profile: Omit<WeixinAccountProfile, "createdAt" | "updatedAt"> & {
+      createdAt?: string;
+      updatedAt?: string;
+    },
+  ): Promise<WeixinAccountProfile> {
+    await this.ensureSchema();
+    const existing = await this.getWeixinAccountProfile(profile.id);
+    const timestamp = nowIso();
+    const createdAt = profile.createdAt || existing?.createdAt || timestamp;
+    const updatedAt = profile.updatedAt || timestamp;
+    await this.d1.prepare(
+      `INSERT OR REPLACE INTO weixin_account_profiles
+      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      profile.id,
+      profile.name,
+      profile.enabled ? 1 : 0,
+      profile.defaultArticleProfileId ?? null,
+      JSON.stringify(profile.brand ?? {}),
+      JSON.stringify(profile.defaults ?? {}),
+      createdAt,
+      updatedAt,
+    ).run();
+    return { ...profile, createdAt, updatedAt };
+  }
+
+  async deleteWeixinAccountProfile(id: string): Promise<boolean> {
+    await this.ensureSchema();
+    const existing = await this.getWeixinAccountProfile(id);
+    if (!existing) return false;
+    await this.d1.prepare("DELETE FROM weixin_account_profiles WHERE id = ?")
+      .bind(id).run();
+    return true;
   }
 
   private async requireFeatureProfile(profileId: string): Promise<void> {

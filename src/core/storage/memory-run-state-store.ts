@@ -16,6 +16,10 @@ export class MemoryRunStateStore implements RunStateStore {
     const timestamp = nowIso();
     const record: ArticleRunRecord = {
       runId: input.runId,
+      runKind: input.runKind ?? "single",
+      parentRunId: input.parentRunId,
+      accountId: input.accountId,
+      profileId: input.profileId,
       mode: input.mode,
       status: "running",
       dryRun: input.dryRun,

@@ -77,6 +77,45 @@ export interface RuntimeScheduleTick {
   slot: string;
 }
 
+export interface WeixinAccountBrandConfig extends JsonObject {
+  displayName?: string;
+  positioning?: string;
+  audience?: string;
+  tone?: string;
+  titleStyle?: string;
+  coverStyle?: string;
+  bodyImageStyle?: string;
+  forbiddenTopics?: string[];
+}
+
+export interface WeixinAccountDefaultsConfig extends JsonObject {
+  articleProfileId?: string;
+  promptProfile?: string;
+  template?: string;
+  count?: number;
+  sourceGroupIds?: string[];
+}
+
+export interface WeixinAccountProfileInput {
+  id: string;
+  name: string;
+  enabled: boolean;
+  defaultArticleProfileId?: string;
+  brand: WeixinAccountBrandConfig;
+  defaults: WeixinAccountDefaultsConfig;
+}
+
+export interface WeixinAccountProfile extends WeixinAccountProfileInput {
+  relay?: {
+    configured: boolean;
+    defaultConfigured?: boolean;
+    appIdMasked?: string;
+    lastCheckedAt?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RuntimeConfigStore {
   ensureSchema(): Promise<void>;
 
@@ -121,4 +160,14 @@ export interface RuntimeConfigStore {
   saveSchedule(input: RuntimeScheduleInput): Promise<RuntimeSchedule>;
   listDueSchedules(now: Date): Promise<RuntimeScheduleTick[]>;
   markScheduleTriggered(scheduleId: string, slot: string): Promise<boolean>;
+
+  listWeixinAccountProfiles(): Promise<WeixinAccountProfile[]>;
+  getWeixinAccountProfile(id: string): Promise<WeixinAccountProfile | null>;
+  saveWeixinAccountProfile(
+    profile: Omit<WeixinAccountProfile, "createdAt" | "updatedAt"> & {
+      createdAt?: string;
+      updatedAt?: string;
+    },
+  ): Promise<WeixinAccountProfile>;
+  deleteWeixinAccountProfile(id: string): Promise<boolean>;
 }

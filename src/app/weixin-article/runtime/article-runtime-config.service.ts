@@ -29,6 +29,7 @@ import type {
   RuntimeArticleSource,
   RuntimeArticleSourceInput,
   RuntimeConfigStore,
+  WeixinAccountProfile,
 } from "@src/core/ports/runtime-config-store.ts";
 
 const DEFAULT_TIMEZONE = "Asia/Shanghai";
@@ -43,6 +44,7 @@ export async function seedArticleRuntimeConfig(
   await store.ensureSchema();
   const existing = await store.getFeatureProfile(ARTICLE_FEATURE_KEY);
   if (existing) {
+    await seedWeixinAccountProfiles(store, baseConfig);
     await migrateLegacyArticleRuntimeConfig(store);
     return;
   }
@@ -162,7 +164,50 @@ export async function seedArticleRuntimeConfig(
     timezone: DEFAULT_TIMEZONE,
     dryRun: article.dryRun,
   });
+  await seedWeixinAccountProfiles(store, baseConfig);
   await migrateLegacyArticleRuntimeConfig(store);
+}
+
+async function seedWeixinAccountProfiles(
+  store: RuntimeConfigStore,
+  baseConfig: ResolvedTrendPublishConfig,
+): Promise<void> {
+  const existing = await store.listWeixinAccountProfiles();
+  if (existing.length > 0) return;
+
+  const accountIds = Object.keys(baseConfig.providers.publish.weixin.accounts);
+  const hasDefault = Boolean(
+    baseConfig.providers.publish.weixin.appId &&
+      baseConfig.providers.publish.weixin.appSecret,
+  );
+  const ids = hasDefault ? ["default", ...accountIds] : accountIds;
+  for (const id of ids) {
+    await store.saveWeixinAccountProfile(defaultWeixinAccountProfile(id));
+  }
+}
+
+function defaultWeixinAccountProfile(id: string): Omit<
+  WeixinAccountProfile,
+  "createdAt" | "updatedAt"
+> {
+  const displayName = id === "default" ? "默认公众号" : id;
+  return {
+    id,
+    name: displayName,
+    enabled: true,
+    defaultArticleProfileId: DEFAULT_ARTICLE_PROFILE_ID,
+    brand: {
+      displayName,
+      positioning: "围绕 AI 趋势生产高质量微信文章",
+      audience: "关注 AI 产品、技术和行业趋势的读者",
+      tone: "专业、克制、清晰，减少 AI 味和空话",
+      titleStyle: "有信息钩子，但不标题党",
+      forbiddenTopics: [],
+    },
+    defaults: {
+      articleProfileId: DEFAULT_ARTICLE_PROFILE_ID,
+    },
+  };
 }
 
 async function migrateLegacyArticleRuntimeConfig(
@@ -247,18 +292,48 @@ export async function resolveArticleRuntimeConfig(
   store: RuntimeConfigStore,
   baseConfig: ResolvedTrendPublishConfig,
   profileId?: string,
+  accountId?: string,
 ): Promise<ResolvedArticleRuntimeConfig> {
+  await seedArticleRuntimeConfig(store, baseConfig);
+  const inputAccount = accountId
+    ? await store.getWeixinAccountProfile(accountId)
+    : null;
+  if (accountId && !inputAccount) {
+    throw new Error(`微信公众号运营账号不存在: ${accountId}`);
+  }
+  if (inputAccount && !inputAccount.enabled) {
+    throw new Error(`微信公众号运营账号已禁用: ${inputAccount.name}`);
+  }
+  const effectiveProfileId = profileId ??
+    inputAccount?.defaultArticleProfileId ??
+    stringValue(inputAccount?.defaults.articleProfileId) ??
+    undefined;
   const detail = await getArticleRuntimeProfileDetail(
     store,
     baseConfig,
-    profileId,
+    effectiveProfileId,
   );
   if (!detail.profile.enabled) {
     throw new Error(`微信文章 Profile 已禁用: ${detail.profile.name}`);
   }
 
   const next = cloneConfig(baseConfig);
-  const article = detail.article;
+  const profileAccountId = accountId ?? detail.article.publisher.accountId;
+  const account = inputAccount ??
+    (profileAccountId
+      ? await store.getWeixinAccountProfile(profileAccountId)
+      : null);
+  if (profileAccountId && !account) {
+    throw new Error(`微信公众号运营账号不存在: ${profileAccountId}`);
+  }
+  if (account && !account.enabled) {
+    throw new Error(`微信公众号运营账号已禁用: ${account.name}`);
+  }
+  const article = applyAccountDefaults(
+    detail.article,
+    account,
+    profileAccountId,
+  );
   const llm = await requireCapability(store, article.renderer.llmProfileId);
   const coverImage = await requireCapability(
     store,
@@ -289,6 +364,7 @@ export async function resolveArticleRuntimeConfig(
   };
   next.features.article.publisher = {
     provider: article.publisher.provider,
+    accountId: article.publisher.accountId ?? "",
   };
 
   const llmModel = stringValue(llm.config.model);
@@ -358,14 +434,43 @@ export async function resolveArticleRuntimeConfig(
     config: next,
     profile: detail.profile,
     article,
-    snapshot: createRuntimeConfigSnapshot(detail, {
-      llm,
-      coverImage,
-      bodyImage,
-      embedding,
-      notification,
-    }),
+    account: account ?? undefined,
+    snapshot: createRuntimeConfigSnapshot(
+      detail,
+      {
+        llm,
+        coverImage,
+        bodyImage,
+        embedding,
+        notification,
+      },
+      article,
+      account ?? undefined,
+    ),
   };
+}
+
+function applyAccountDefaults(
+  article: ArticleFeatureProfileConfig,
+  account: WeixinAccountProfile | null,
+  inputAccountId?: string,
+): ArticleFeatureProfileConfig {
+  const next = structuredClone(article);
+  const accountId = inputAccountId ?? account?.id;
+  if (accountId) next.publisher.accountId = accountId;
+  if (!account?.enabled) return next;
+
+  const promptProfile = stringValue(account.defaults.promptProfile);
+  if (promptProfile) {
+    next.renderer.promptProfile = promptProfile as PromptProfileName;
+  }
+  const template = stringValue(account.defaults.template);
+  if (template) {
+    next.renderer.template = readTemplate(template, next.renderer.template);
+  }
+  const count = numberValue(account.defaults.count);
+  if (count) next.count = Math.min(Math.max(Math.floor(count), 1), 50);
+  return next;
 }
 
 export async function saveArticleProfileConfig(
@@ -445,6 +550,7 @@ export function defaultArticleProfileConfig(
     },
     publisher: {
       provider: article.publisher.provider,
+      accountId: article.publisher.accountId,
     },
     cover: {
       enabled: article.cover.enabled,
@@ -511,6 +617,8 @@ export function readArticleConfig(
     },
     publisher: {
       provider: readPublisher(publisher.provider, fallback.publisher.provider),
+      accountId: stringValue(publisher.accountId) ??
+        fallback.publisher.accountId,
     },
     cover: {
       enabled: booleanValue(cover.enabled) ?? fallback.cover.enabled,
@@ -624,7 +732,10 @@ function articleConfigToResolvedFallback(
       template: config.renderer.template,
       promptProfile: config.renderer.promptProfile,
     },
-    publisher: { provider: config.publisher.provider },
+    publisher: {
+      provider: config.publisher.provider,
+      accountId: config.publisher.accountId,
+    },
     count: config.count,
     dryRun: config.dryRun,
     notifications: { channels: [] },
@@ -758,6 +869,8 @@ function createRuntimeConfigSnapshot(
     embedding: CapabilityProfile;
     notification: CapabilityProfile | null;
   },
+  article: ArticleFeatureProfileConfig = detail.article,
+  account?: WeixinAccountProfile,
 ): JsonObject {
   return {
     feature: ARTICLE_FEATURE_KEY,
@@ -767,7 +880,17 @@ function createRuntimeConfigSnapshot(
       enabled: detail.profile.enabled,
       version: detail.profile.version,
     },
-    article: articleConfigToJson(detail.article),
+    article: articleConfigToJson(article),
+    account: account
+      ? {
+        id: account.id,
+        name: account.name,
+        enabled: account.enabled,
+        defaultArticleProfileId: account.defaultArticleProfileId,
+        brand: account.brand,
+        defaults: account.defaults,
+      }
+      : null,
     sources: detail.sources
       .filter((source) => source.enabled)
       .map((source) => ({

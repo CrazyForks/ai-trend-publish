@@ -5,6 +5,7 @@ import {
   ConfigRuntimeTarget,
   ResolvedTrendPublishConfig,
   resolveTrendPublishConfig,
+  resolveWeixinPublishAccount,
   TrendPublishConfigSource,
 } from "@src/utils/config/define-config.ts";
 import { configureLoggerObservability } from "@src/core/logger/configure-logger-observability.ts";
@@ -90,13 +91,29 @@ export async function validateAppConfig(
   }
 
   if (options.requireWeixinPublish) {
-    collectMissing([
-      ["providers.publish.weixin.appId", config.providers.publish.weixin.appId],
-      [
-        "providers.publish.weixin.appSecret",
-        config.providers.publish.weixin.appSecret,
-      ],
-    ], missing);
+    if (config.features.article.publisher.provider === "weixin-relay") {
+      collectMissing([
+        [
+          "providers.publish.weixinRelay.url",
+          config.providers.publish.weixinRelay.url,
+        ],
+        [
+          "providers.publish.weixinRelay.token",
+          config.providers.publish.weixinRelay.token,
+        ],
+      ], missing);
+    }
+    const account = resolveWeixinPublishAccount(
+      config.providers.publish.weixin,
+      config.features.article.publisher.accountId,
+    );
+    if (!account) {
+      missing.push(
+        config.features.article.publisher.accountId
+          ? `providers.publish.weixin.accounts.${config.features.article.publisher.accountId}`
+          : "providers.publish.weixin.appId/appSecret 或 providers.publish.weixin.accounts",
+      );
+    }
   }
 
   if (missing.length > 0) {

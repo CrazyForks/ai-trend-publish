@@ -94,12 +94,54 @@ providers: {
 }
 ```
 
-如果是 Cloudflare Worker / Workflows 这类没有固定出口 IP 的环境，推荐发布到 固定
-IP 机器上的 `weixin-relay`，Cloudflare 配置里只放 relay 地址和 token：
+多公众号时，把每个公众号放进 `accounts`，再由文章方案选择目标账号：
 
 ```ts
 providers: {
   publish: {
+    weixin: {
+      accounts: {
+        main: { appId: "main_app_id", appSecret: "main_secret" },
+        lab: { appId: "lab_app_id", appSecret: "lab_secret" },
+      },
+    },
+  },
+},
+features: {
+  article: {
+    publisher: { provider: "weixin", accountId: "main" },
+  },
+},
+```
+
+这里的 `providers.publish.weixin.accounts`
+只保存微信连接信息。账号的运营信息不放在 TS 配置里，而是进入运行时配置：
+
+- Dashboard `账号矩阵`：维护账号名称、定位、目标读者、语气、标题偏好和禁区。
+- `defaultArticleProfileId`：给账号绑定默认文章方案。
+- `defaults`：允许账号覆盖模板、提示词风格和文章数量，但不会反向修改文章方案。
+
+运行时解析优先级是：本次运行传入的 `accountId` > 文章方案里的
+`publisher.accountId` > 账号绑定的默认文章方案。解析后的账号快照会写入本次 run
+的配置 artifact，便于复盘某篇文章用了哪个账号风格。
+
+如果是 Cloudflare Worker / Workflows 这类没有固定出口 IP 的环境，推荐发布到固定
+IP 机器上的 `weixin-relay`。新的 relay 是无账号状态的固定 IP 代理：
+
+- relay 机器只配置 `server.apiKey`，不保存公众号 AppID/AppSecret。
+- Cloudflare / 主服务仍配置
+  `providers.publish.weixin`，运行时会把本次账号凭证随请求透传给 relay。
+- `providers.publish.weixinRelay.token` 必须与 relay 机器的 `server.apiKey`
+  一致。
+
+```ts
+providers: {
+  publish: {
+    weixin: {
+      accounts: {
+        main: { appId: "main_app_id", appSecret: "main_secret" },
+      },
+    },
     weixinRelay: {
       url: "https://relay.example.com",
       token: "your_relay_token",
@@ -108,7 +150,7 @@ providers: {
 },
 features: {
   article: {
-    publisher: { provider: "weixin-relay" },
+    publisher: { provider: "weixin-relay", accountId: "main" },
     dryRun: false,
   },
 },
@@ -116,25 +158,25 @@ features: {
 
 ## 功能开关与必需配置
 
-| 想开启的功能            | TS 配置位置                                                                                 | 说明                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 启动 JSON-RPC 服务      | `server.apiKey`                                                                             | API 请求需带 `Authorization: Bearer <key>`                                                           |
-| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                            | 使用 OpenAI Chat Completions 兼容接口                                                                |
-| 本地模板预览            | `features.article.renderer.template`                                                        | 静态模板不依赖公众号配置                                                                             |
-| 提示词风格              | `features.article.renderer.promptProfile`                                                   | 控制排序、摘要、标题、动态排版和配图口径                                                             |
-| 微信文章 dry-run        | `features.article.dryRun: true`                                                             | 不发布，本地输出 HTML，Cloudflare 输出 R2 artifact                                                   |
-| 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin` 或 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay                                                        |
-| 文章数据源              | `features.article.sources`                                                                  | URL 列表，可用抓取分组前缀                                                                           |
-| 抓取供应商              | `providers.fetch.*`                                                                         | FireCrawl、Twitter/X、Xquik、Jina、Brave、Tavily、Exa、Serper、NewsAPI、RSS；GDELT/HN/arXiv 无需 Key |
-| 封面生图                | `features.article.cover`, `providers.image.dashscope/minimax.apiKey`                        | 支持阿里云图片生成和 MiniMax，失败时使用兜底封面                                                     |
-| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope/minimax.apiKey`                   | 按文章内容生成正文配图，失败时回退已有图片                                                           |
-| 发布前质量门禁          | `features.article.qualityGate`                                                              | 只保护真实发布，dry-run 永远继续产出                                                                 |
-| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`        | 本地/Docker 用 SQLite，Cloudflare 用 D1                                                              |
-| 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                     | 本地写文件，Cloudflare 使用 R2/KV/D1                                                                 |
-| 日志观测                | `observability`                                                                             | 镜像所有 Logger 输出到 stdout 或 HTTP ingest                                                         |
-| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                          | channels 中包含 `bark` 时检查 Bark URL                                                               |
-| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                      | channels 中包含 `dingtalk` 时检查 webhook                                                            |
-| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                        | channels 中包含 `feishu` 时检查 webhook                                                              |
+| 想开启的功能            | TS 配置位置                                                                                        | 说明                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 启动 JSON-RPC 服务      | `server.apiKey`                                                                                    | API 请求需带 `Authorization: Bearer <key>`                                                           |
+| AI 摘要、排序、动态模板 | `providers.ai.*`                                                                                   | 使用 OpenAI Chat Completions 兼容接口                                                                |
+| 本地模板预览            | `features.article.renderer.template`                                                               | 静态模板不依赖公众号配置                                                                             |
+| 提示词风格              | `features.article.renderer.promptProfile`                                                          | 控制排序、摘要、标题、动态排版和配图口径                                                             |
+| 微信文章 dry-run        | `features.article.dryRun: true`                                                                    | 不发布，本地输出 HTML，Cloudflare 输出 R2 artifact                                                   |
+| 微信公众号正式发布      | `features.article.publisher`, `providers.publish.weixin`，按需配置 `providers.publish.weixinRelay` | 本地固定 IP 可直连微信；Cloudflare 推荐 relay。relay 不保存公众号凭证，主服务透传本次账号凭证        |
+| 文章数据源              | `features.article.sources`                                                                         | URL 列表，可用抓取分组前缀                                                                           |
+| 抓取供应商              | `providers.fetch.*`                                                                                | FireCrawl、Twitter/X、Xquik、Jina、Brave、Tavily、Exa、Serper、NewsAPI、RSS；GDELT/HN/arXiv 无需 Key |
+| 封面生图                | `features.article.cover`, `providers.image.dashscope/minimax.apiKey`                               | 支持阿里云图片生成和 MiniMax，失败时使用兜底封面                                                     |
+| 正文 AI 智能配图        | `features.article.bodyImages`, `providers.image.dashscope/minimax.apiKey`                          | 按文章内容生成正文配图，失败时回退已有图片                                                           |
+| 发布前质量门禁          | `features.article.qualityGate`                                                                     | 只保护真实发布，dry-run 永远继续产出                                                                 |
+| 文章向量去重            | `features.article.deduplication`, `providers.vector.embedding.*`, `storage.vector.*`               | 本地/Docker 用 SQLite，Cloudflare 用 D1                                                              |
+| 运行看板和产物          | `storage.artifacts`, `storage.runState`                                                            | 本地写文件，Cloudflare 使用 R2/KV/D1                                                                 |
+| 日志观测                | `observability`                                                                                    | 镜像所有 Logger 输出到 stdout 或 HTTP ingest                                                         |
+| Bark 通知               | `features.article.notifications.channels`, `providers.notify.bark`                                 | channels 中包含 `bark` 时检查 Bark URL                                                               |
+| 钉钉通知                | `features.article.notifications.channels`, `providers.notify.dingtalk`                             | channels 中包含 `dingtalk` 时检查 webhook                                                            |
+| 飞书通知                | `features.article.notifications.channels`, `providers.notify.feishu`                               | channels 中包含 `feishu` 时检查 webhook                                                              |
 
 ## 运行产物与看板存储
 
@@ -193,6 +235,7 @@ Dashboard 中的运行时配置分成两类：
 
 - 能力 Profile：LLM、图片生成、通知、抓取策略、Embedding 等可复用能力。
 - 功能 Profile：微信文章这类具体功能，引用能力 Profile，并允许覆盖少量参数。
+- 账号 Profile：公众号运营定位和默认文章方案，用于多账号矩阵运行。
 
 例如多个微信文章 Profile 可以共用同一个“正文配图”能力 Profile，也可以分别覆盖
 图片数量或尺寸。
@@ -292,10 +335,11 @@ providers: {
     weixin: {
       appId: "your_app_id",
       appSecret: "your_app_secret",
+      // 多公众号时也可以改用 accounts，并在 publisher.accountId 里选择。
     },
   },
 },
-features: { article: { dryRun: false } },
+features: { article: { publisher: { provider: "weixin" }, dryRun: false } },
 ```
 
 运行：

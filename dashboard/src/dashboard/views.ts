@@ -1,6 +1,7 @@
 export type DashboardView =
   | "home"
   | "trend"
+  | "accounts"
   | "sources"
   | "quality"
   | "runs"
@@ -18,6 +19,10 @@ export const VIEW_META: Record<
   trend: {
     title: "文章方案",
     description: "配置文章数量、模板、配图、发布方式和质量门禁。",
+  },
+  accounts: {
+    title: "账号矩阵",
+    description: "管理公众号定位、主题风格和默认文章方案。",
   },
   sources: {
     title: "内容来源",

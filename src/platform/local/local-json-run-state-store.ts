@@ -31,6 +31,10 @@ export class LocalJsonRunStateStore implements RunStateStore {
     const existing = state.runs.find((run) => run.runId === input.runId);
     const record: ArticleRunRecord = {
       runId: input.runId,
+      runKind: input.runKind ?? "single",
+      parentRunId: input.parentRunId,
+      accountId: input.accountId,
+      profileId: input.profileId,
       mode: input.mode,
       status: "running",
       dryRun: input.dryRun,

@@ -5,6 +5,10 @@ import {
   PublishResult,
 } from "@src/core/ports/content-publisher.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import {
+  type ResolvedWeixinPublishAccountConfig,
+  resolveWeixinPublishAccount,
+} from "@src/utils/config/define-config.ts";
 import { SafeImageDownloader } from "@src/utils/image/safe-image-downloader.ts";
 import { ProviderError } from "@src/core/errors/provider-error.ts";
 import { redactError } from "@src/utils/security/redact.ts";
@@ -55,6 +59,7 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
     private readonly configuredProvider?: ResolvedTrendPublishConfig[
       "providers"
     ]["publish"]["weixin"],
+    private readonly accountId?: string,
     private readonly apiClient = new WeixinApiClient(),
     private readonly imageDownloader = new SafeImageDownloader(),
   ) {}
@@ -266,6 +271,7 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
    */
   async publishArticle(request: PublishArticleRequest): Promise<PublishResult> {
     try {
+      const account = this.getAccount();
       // 上传草稿
       const draft = await this.uploadDraft(
         request.content,
@@ -278,6 +284,7 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
         status: "draft",
         publishedAt: new Date(),
         platform: "weixin",
+        accountId: account.accountId,
         url: `https://mp.weixin.qq.com/s/${draft.media_id}`,
       };
     } catch (error) {
@@ -303,13 +310,30 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
     }
   }
 
-  private getProvider(): ResolvedTrendPublishConfig["providers"]["publish"][
-    "weixin"
-  ] {
+  private getAccount(): {
+    accountId: string;
+    provider: ResolvedWeixinPublishAccountConfig;
+  } {
     if (!this.configuredProvider) {
       throw new Error("providers.publish.weixin is not configured");
     }
-    return this.configuredProvider;
+    const account = resolveWeixinPublishAccount(
+      this.configuredProvider,
+      this.accountId,
+    );
+    if (!account) {
+      const requested = this.accountId?.trim();
+      throw new Error(
+        requested
+          ? `未找到或未配置微信公众号账号: ${requested}`
+          : "未配置默认微信公众号账号；多公众号配置时请设置 publisher.accountId",
+      );
+    }
+    return { accountId: account.accountId, provider: account.account };
+  }
+
+  private getProvider(): ResolvedWeixinPublishAccountConfig {
+    return this.getAccount().provider;
   }
 }
 

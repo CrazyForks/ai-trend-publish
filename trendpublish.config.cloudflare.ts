@@ -61,6 +61,7 @@ export default defineConfig((runtime) => {
     "WEIXIN_PUBLISH_PROVIDER",
     "",
   );
+  const weixinAccountId = runtime.value("WEIXIN_ACCOUNT_ID", "");
   const articlePublishProvider = weixinRelayUrl && weixinRelayToken
     ? "weixin-relay"
     : (configuredPublishProvider || "weixin") as "weixin" | "weixin-relay";
@@ -170,6 +171,7 @@ export default defineConfig((runtime) => {
         ),
         publisher: {
           provider: articlePublishProvider,
+          accountId: weixinAccountId,
         },
         renderer: {
           template: runtime.value(

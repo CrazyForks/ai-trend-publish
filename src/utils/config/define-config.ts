@@ -139,26 +139,49 @@ export interface ImageProvidersConfig {
   };
 }
 
+/** 单个微信公众号账号凭证与发布偏好。 */
+export interface WeixinPublishAccountConfig {
+  /** 微信公众号 AppID。 */
+  appId?: string;
+  /** 微信公众号 AppSecret。 */
+  appSecret?: string;
+  /** 公众号草稿/文章元信息中显示的作者名。 */
+  author?: string;
+  /** 是否开启文章留言。 */
+  needOpenComment?: boolean;
+  /** 是否仅粉丝可留言。 */
+  onlyFansCanComment?: boolean;
+}
+
+export interface ResolvedWeixinPublishAccountConfig {
+  appId: string;
+  appSecret: string;
+  author: string;
+  needOpenComment: boolean;
+  onlyFansCanComment: boolean;
+}
+
 /** 发布供应商凭证。实际发布 provider 在 features.article.publisher 中选择。 */
 export interface PublishProvidersConfig {
-  /** 微信公众号发布凭证。dryRun=false 正式发布时必填。 */
-  weixin?: {
-    /** 微信公众号 AppID。 */
-    appId?: string;
-    /** 微信公众号 AppSecret。 */
-    appSecret?: string;
-    /** 公众号草稿/文章元信息中显示的作者名。 */
-    author?: string;
-    /** 是否开启文章留言。 */
-    needOpenComment?: boolean;
-    /** 是否仅粉丝可留言。 */
-    onlyFansCanComment?: boolean;
+  /**
+   * 微信公众号发布凭证。dryRun=false 正式发布时必填。
+   *
+   * 兼容单公众号写法：直接填写 appId/appSecret。
+   * 多公众号写法：在 accounts 中按 accountId 配置多个账号，
+   * 然后由 features.article.publisher.accountId 选择发布目标。
+   *
+   * 使用 weixin-relay 时，凭证仍保存在主服务配置中；relay 只做固定 IP
+   * 透传代理，不保存、不枚举公众号账号。
+   */
+  weixin?: WeixinPublishAccountConfig & {
+    /** 多公众号账号表，key 是可读稳定的 accountId，例如 "main"、"lab"。 */
+    accounts?: Record<string, WeixinPublishAccountConfig>;
   };
   /** 微信发布中转服务。用于 Cloudflare 等没有固定出口 IP 的部署方式。 */
   weixinRelay?: {
-    /** Relay 服务地址，例如 "https://relay.example.com"。 */
+    /** Relay 服务地址，例如 "https://relay.example.com"。relay 只保存自己的 API key。 */
     url?: string;
-    /** Relay Bearer Token。 */
+    /** Relay Bearer Token，应与 relay 服务的 server.apiKey 一致。 */
     token?: string;
   };
 }
@@ -235,6 +258,14 @@ export interface ArticleRendererConfig {
 export interface ArticlePublisherConfig {
   /** 文章工作流使用的发布 provider。本地固定 IP 可用 "weixin"，Cloudflare 推荐 "weixin-relay"。 */
   provider?: ArticlePublisherProvider;
+  /**
+   * 发布目标公众号账号 ID。
+   *
+   * - 本地直连 weixin：对应 providers.publish.weixin.accounts 的 key。
+   * - weixin-relay：主服务先解析账号凭证，再随请求透传给 relay。
+   * 留空时使用默认公众号；多账号且没有默认账号时需要显式填写。
+   */
+  accountId?: string;
 }
 
 /** 文章工作流通知配置。 */
@@ -531,12 +562,8 @@ export interface ResolvedTrendPublishConfig {
       };
     };
     publish: {
-      weixin: {
-        appId: string;
-        appSecret: string;
-        author: string;
-        needOpenComment: boolean;
-        onlyFansCanComment: boolean;
+      weixin: ResolvedWeixinPublishAccountConfig & {
+        accounts: Record<string, ResolvedWeixinPublishAccountConfig>;
       };
       weixinRelay: {
         url: string;
@@ -568,6 +595,7 @@ export interface ResolvedTrendPublishConfig {
       };
       publisher: {
         provider: ArticlePublisherProvider;
+        accountId: string;
       };
       count: number;
       dryRun: boolean;
@@ -665,6 +693,93 @@ export function defineConfig<T extends TrendPublishConfigSource>(
   return config;
 }
 
+function resolveWeixinAccountConfig(
+  account: WeixinPublishAccountConfig | undefined,
+  defaults?: Pick<
+    ResolvedWeixinPublishAccountConfig,
+    "author" | "needOpenComment" | "onlyFansCanComment"
+  >,
+): ResolvedWeixinPublishAccountConfig {
+  return {
+    appId: account?.appId ?? "",
+    appSecret: account?.appSecret ?? "",
+    author: account?.author ?? defaults?.author ?? "AI Trend Publish",
+    needOpenComment: account?.needOpenComment ??
+      defaults?.needOpenComment ?? true,
+    onlyFansCanComment: account?.onlyFansCanComment ??
+      defaults?.onlyFansCanComment ?? false,
+  };
+}
+
+function resolveWeixinAccounts(
+  provider: PublishProvidersConfig["weixin"] | undefined,
+  defaults: ResolvedWeixinPublishAccountConfig,
+): Record<string, ResolvedWeixinPublishAccountConfig> {
+  const entries = Object.entries(provider?.accounts ?? {}).map((
+    [accountId, account],
+  ) => [
+    accountId,
+    resolveWeixinAccountConfig(account, {
+      author: defaults.author,
+      needOpenComment: defaults.needOpenComment,
+      onlyFansCanComment: defaults.onlyFansCanComment,
+    }),
+  ]);
+  return Object.fromEntries(entries);
+}
+
+export interface ResolvedWeixinPublishAccountSelection {
+  accountId: string;
+  account: ResolvedWeixinPublishAccountConfig;
+  isDefault: boolean;
+}
+
+export function isResolvedWeixinAccountConfigured(
+  account: ResolvedWeixinPublishAccountConfig | undefined,
+): boolean {
+  return Boolean(account?.appId && account.appSecret);
+}
+
+export function hasAnyResolvedWeixinAccount(
+  provider: ResolvedTrendPublishConfig["providers"]["publish"]["weixin"],
+): boolean {
+  return isResolvedWeixinAccountConfigured(provider) ||
+    Object.values(provider.accounts).some(isResolvedWeixinAccountConfigured);
+}
+
+export function resolveWeixinPublishAccount(
+  provider: ResolvedTrendPublishConfig["providers"]["publish"]["weixin"],
+  requestedAccountId?: string,
+): ResolvedWeixinPublishAccountSelection | null {
+  const normalized = requestedAccountId?.trim();
+  if (normalized && normalized !== "default") {
+    const account = provider.accounts[normalized];
+    return account
+      ? { accountId: normalized, account, isDefault: false }
+      : null;
+  }
+
+  if (normalized === "default") {
+    return isResolvedWeixinAccountConfigured(provider)
+      ? { accountId: "default", account: provider, isDefault: true }
+      : null;
+  }
+
+  if (isResolvedWeixinAccountConfigured(provider)) {
+    return { accountId: "default", account: provider, isDefault: true };
+  }
+
+  const configuredAccounts = Object.entries(provider.accounts).filter((
+    [, account],
+  ) => isResolvedWeixinAccountConfigured(account));
+  if (configuredAccounts.length === 1) {
+    const [accountId, account] = configuredAccounts[0];
+    return { accountId, account, isDefault: false };
+  }
+
+  return null;
+}
+
 export function resolveTrendPublishConfig(
   config: TrendPublishConfig,
 ): ResolvedTrendPublishConfig {
@@ -673,6 +788,13 @@ export function resolveTrendPublishConfig(
   const articlePublisher = article.publisher ?? {};
   const coverProvider = article.cover?.provider ?? "dashscope";
   const bodyImageProvider = article.bodyImages?.provider ?? "dashscope";
+  const weixinDefaultAccount = resolveWeixinAccountConfig(
+    config.providers?.publish?.weixin,
+  );
+  const weixinAccounts = resolveWeixinAccounts(
+    config.providers?.publish?.weixin,
+    weixinDefaultAccount,
+  );
 
   return {
     server: {
@@ -729,14 +851,8 @@ export function resolveTrendPublishConfig(
       },
       publish: {
         weixin: {
-          appId: config.providers?.publish?.weixin?.appId ?? "",
-          appSecret: config.providers?.publish?.weixin?.appSecret ?? "",
-          author: config.providers?.publish?.weixin?.author ??
-            "AI Trend Publish",
-          needOpenComment: config.providers?.publish?.weixin?.needOpenComment ??
-            true,
-          onlyFansCanComment:
-            config.providers?.publish?.weixin?.onlyFansCanComment ?? false,
+          ...weixinDefaultAccount,
+          accounts: weixinAccounts,
         },
         weixinRelay: {
           url: config.providers?.publish?.weixinRelay?.url ?? "",
@@ -776,6 +892,7 @@ export function resolveTrendPublishConfig(
         },
         publisher: {
           provider: articlePublisher.provider ?? "weixin",
+          accountId: articlePublisher.accountId ?? "",
         },
         count: article.count ?? 10,
         dryRun: article.dryRun ?? true,

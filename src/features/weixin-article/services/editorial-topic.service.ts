@@ -1,6 +1,7 @@
 import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
 import type { EditorialMemoryContext } from "@src/core/ports/editorial-memory-store.ts";
 import type { LLMProvider } from "@src/core/ports/llm.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 import {
   EditorialTopicReport,
   TopicCluster,
@@ -27,6 +28,7 @@ export class WeixinArticleEditorialTopicService {
     private readonly llm: LLMProvider,
     private readonly promptProfile?: PromptProfileName,
     private readonly maxTopics = 8,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   async createTopicReport(
@@ -46,7 +48,10 @@ export class WeixinArticleEditorialTopicService {
       const messages = [
         {
           role: "system" as const,
-          content: getEditorialTopicSystemPrompt(this.promptProfile),
+          content: getEditorialTopicSystemPrompt(
+            this.promptProfile,
+            this.accountBrand,
+          ),
         },
         {
           role: "user" as const,
@@ -54,6 +59,7 @@ export class WeixinArticleEditorialTopicService {
             contents,
             this.maxTopics,
             memory,
+            this.accountBrand,
           ),
         },
       ];
