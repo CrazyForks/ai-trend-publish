@@ -32,11 +32,9 @@ await writeServiceFile(serviceFile, unit);
 await runPrivileged("systemctl", ["daemon-reload"]);
 
 if (!installOptions.noStart) {
-  await runPrivileged("systemctl", [
-    "enable",
-    "--now",
-    `${installOptions.serviceName}.service`,
-  ]);
+  const unitName = `${installOptions.serviceName}.service`;
+  await runPrivileged("systemctl", ["enable", unitName]);
+  await runPrivileged("systemctl", ["restart", unitName]);
 }
 
 console.log(`relay systemd 服务已安装: ${installOptions.serviceName}`);
